@@ -1,0 +1,42 @@
+{
+  "nicho": "clínicas estéticas",
+  "ciudad": "Monterrey",
+  "nombre_demo": "Clínica Estética Aura (demo)",
+  "giro": "clínica de medicina estética",
+  "horario": {
+    "lun": [["10:00", "20:00"]],
+    "mar": [["10:00", "20:00"]],
+    "mie": [["10:00", "20:00"]],
+    "jue": [["10:00", "20:00"]],
+    "vie": [["10:00", "20:00"]],
+    "sab": [["10:00", "15:00"]],
+    "dom": []
+  },
+  "servicios": [
+    {"id": "valoracion", "nombre": "Valoración con la doctora", "precio_mxn": 500, "duracion_min": 30,
+     "descripcion": "Consulta para revisar tu caso y armar un plan. Se descuenta si haces tu tratamiento con nosotros."},
+    {"id": "botox", "nombre": "Aplicación de bótox", "precio_mxn": 4500, "duracion_min": 30,
+     "descripcion": "Toxina botulínica en frente, entrecejo y patas de gallo. Incluye revisión a los 15 días."},
+    {"id": "labios", "nombre": "Relleno de labios con ácido hialurónico", "precio_mxn": 6500, "duracion_min": 45,
+     "descripcion": "Una jeringa de ácido hialurónico. La cantidad final se define en la valoración."},
+    {"id": "facial", "nombre": "Limpieza facial profunda", "precio_mxn": 1200, "duracion_min": 60,
+     "descripcion": "Limpieza, extracción y mascarilla según tu tipo de piel."},
+    {"id": "laser", "nombre": "Depilación láser de axilas", "precio_mxn": 900, "duracion_min": 20,
+     "descripcion": "Precio por sesión. Normalmente se necesitan de 6 a 8 sesiones."}
+  ],
+  "faq": [
+    {"pregunta": "¿Tienen estacionamiento?", "respuesta": "Sí, hay estacionamiento gratuito para pacientes."},
+    {"pregunta": "¿Qué formas de pago aceptan?", "respuesta": "Efectivo, tarjeta de débito y crédito, y transferencia. Con tarjetas participantes hay meses sin intereses."},
+    {"pregunta": "¿Quién hace los tratamientos?", "respuesta": "Todos los tratamientos los hace una médica con cédula profesional."},
+    {"pregunta": "¿Cuánto dura el bótox?", "respuesta": "El efecto suele durar de 3 a 4 meses; en la valoración la doctora te explica tu caso."}
+  ],
+  "palabras_urgencia": ["urgencia", "emergencia", "reaccion alergica", "alergia", "no puedo respirar",
+                        "me falta el aire", "hinchazon fuerte", "muy hinchado", "muy hinchada", "dolor fuerte",
+                        "mucho dolor", "sangrado", "sangra", "fiebre", "quemadura", "ampolla", "se puso morado",
+                        "se puso negro", "vision borrosa", "no veo bien", "desmayo"],
+  "demo": {"servicio_noche": "botox", "servicio_dia": "labios"},
+  "auditoria": {
+    "mensaje_prueba": "Hola, buenas. ¿Cuánto cuesta la aplicación de bótox y tienen disponibilidad esta semana?",
+    "perdida_estimada": 0.2
+  }
+}

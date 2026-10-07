@@ -124,3 +124,17 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - Texto del escalamiento sin minutos fijos (el umbral es configurable).
 - La revisión de opt-out vive en un solo lugar (`base.dio_baja`).
 - (Encontrado al probar la bandeja en Chromium real) "Asistió"/"No asistió" solo se pueden marcar el día de la cita o después, y la fecha de la venta desde una cita nunca es futura: antes se podía marcar asistencia de una cita futura y la venta se rechazaba.
+
+## Agregadas con el kit de venta y la prueba real
+- `verificar --remoto` lee el campo documentado por Meta, `webhook_configuration.phone_number`, en vez de buscar la URL en toda la respuesta (la documentación ya fue accesible). `prueba-real` guarda la respuesta real en `meta-webhook-configuration.json` para confirmarlo.
+- Túnel para la prueba real: ngrok con su dominio gratuito fijo, no el túnel rápido de cloudflared: la prueba dura dos sesiones (noche y día siguiente) y con una URL fija Meta se configura una sola vez.
+- `prueba-real` no espera días reales: el paso `seguimiento` pone `seg_inicio` 2 días atrás y corre el seguimiento; el paso `asistencia` mueve la cita a hace una hora (solo en la base) si no es de hoy. El mensaje de noche sí debe mandarse de noche, porque la hora la pone Meta.
+- `prueba-real` revisa la base automáticamente y además pregunta qué se vio en el teléfono: un paso pasa solo si ambas cosas salen bien. Resultados en `prueba-real.json` y `prueba-real-resultados.md`.
+- Antes del override, `prueba-real` suscribe la app a la WABA (`POST /{waba_id}/subscribed_apps`): Meta lo exige para el override. Ambas llamadas piden confirmación.
+- Un archivo por giro en `nichos/` sirve a la demo y a la auditoría (el mensaje de prueba y la pérdida estimada viven en su sección `auditoria`).
+- Auditoría: una prueba sin hora de envío no se hizo y no cuenta; el puntaje se escala a 100 sobre lo probado (el plan prueba fuera de horario solo a 10 de los 20).
+- Auditoría, casos que la tabla del plan no define: más de 100 reseñas sin contestarlas = 5 puntos (nivel 30-100); facilidad de contacto con solo botón o solo horario = 5; respuesta fuera de horario después de 1 hora, a cualquier hora = 5 ("al día siguiente").
+- Venta en riesgo = consultas al mes × pérdida estimada (0.2 por defecto, "1 de cada 5" del plan) × ticket promedio, marcada como estimación. Sin datos del dueño, el reporte dice que está pendiente.
+- Reporte de auditoría en HTML de una página carta, sin recursos externos; se imprime a PDF desde el navegador. `resumen.html` lleva todos los nombres y es solo para uso interno.
+- `demo-ventas` usa siempre la IA simulada (quita `ANTHROPIC_API_KEY` mientras corre) y un reloj simulado que empieza el primer lunes del mes actual, para que todo caiga en el mismo mes del reporte. Siempre empieza de cero: rechaza una carpeta que ya tenga una demo.
+

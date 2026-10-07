@@ -82,11 +82,12 @@ def remotos(con, cfg):
         r.append(("ERROR", f"Meta: no se pudo leer el número: {e}"))
     esperado = cfg["url_publica"].rstrip("/") + "/webhook"
     try:
-        # ponytail: se busca la URL en toda la respuesta en lugar de depender del nombre exacto del campo.
+        # Formato documentado por Meta: {"webhook_configuration": {"phone_number": url, "application": url}}.
+        # prueba-real guarda la respuesta real para confirmarlo.
         conf = wa.graph_get(cfg, f"{w['phone_number_id']}?fields=webhook_configuration")
-        r.append(("OK" if esperado in json.dumps(conf) else "ERROR",
-                  f"override de webhook del número → {esperado}" + ("" if esperado in json.dumps(conf) else
-                                                                     f" NO configurado (Meta respondió {json.dumps(conf)[:300]})")))
+        ok = conf.get("webhook_configuration", {}).get("phone_number") == esperado
+        r.append(("OK" if ok else "ERROR", f"override de webhook del número → {esperado}" +
+                  ("" if ok else f" NO configurado (Meta respondió {json.dumps(conf)[:300]})")))
     except Exception as e:
         r.append(("ERROR", f"override de webhook: {e}"))
     try:
