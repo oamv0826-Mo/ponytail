@@ -1,0 +1,40 @@
+{
+  "nombre": "Clínica Dental Sonrisa (demo)",
+  "giro": "clínica dental",
+  "modo_prueba": true,
+  "url_publica": "http://127.0.0.1:8080",
+  "puerto": 8080,
+  "fecha_inicio": "2026-10-01",
+  "mensualidad_mxn": 6000,
+  "telefono_negocio": "+528110000000",
+  "whatsapp": {"phone_number_id": "", "waba_id": "", "graph_version": "v23.0"},
+  "dueno": {"nombre": "Dra. Laura Garza", "telefono": "+528111111111"},
+  "equipo": [{"nombre": "Ana (recepción)", "telefono": "+528122222222"}],
+  "direccion": "Av. Ejemplo 123, Col. Centro, Monterrey, N.L.",
+  "horario": {
+    "lun": [["09:00", "14:00"], ["16:00", "19:00"]],
+    "mar": [["09:00", "14:00"], ["16:00", "19:00"]],
+    "mie": [["09:00", "14:00"], ["16:00", "19:00"]],
+    "jue": [["09:00", "14:00"], ["16:00", "19:00"]],
+    "vie": [["09:00", "14:00"], ["16:00", "19:00"]],
+    "sab": [["09:00", "14:00"]],
+    "dom": []
+  },
+  "dias_cerrados": ["2026-11-16", "2026-12-25", "2027-01-01"],
+  "servicios": [
+    {"id": "valoracion", "nombre": "Consulta de valoración", "precio_mxn": 300, "duracion_min": 30,
+     "descripcion": "Revisión general y plan de tratamiento. Se descuenta si haces tu tratamiento con nosotros."},
+    {"id": "limpieza", "nombre": "Limpieza dental", "precio_mxn": 800, "duracion_min": 45,
+     "descripcion": "Limpieza con ultrasonido y pulido."},
+    {"id": "blanqueamiento", "nombre": "Blanqueamiento dental", "precio_mxn": 3500, "duracion_min": 60,
+     "descripcion": "Blanqueamiento en consultorio en una sesión."}
+  ],
+  "faq": [
+    {"pregunta": "¿Tienen estacionamiento?", "respuesta": "Sí, tenemos estacionamiento gratuito frente a la clínica."},
+    {"pregunta": "¿Qué formas de pago aceptan?", "respuesta": "Aceptamos efectivo, tarjeta de débito y crédito, y transferencia."},
+    {"pregunta": "¿Dónde están ubicados?", "respuesta": "Estamos en Av. Ejemplo 123, Col. Centro, Monterrey."}
+  ],
+  "ia": {"modelo": "claude-haiku-4-5", "tope_mensual_usd": 30},
+  "agenda": {"proveedor": "local", "calendar_id": ""},
+  "resenas": {"link": "https://g.page/r/EJEMPLO/review"}
+}
