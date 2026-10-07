@@ -55,3 +55,18 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - `simular` se niega a correr con `modo_prueba=false` salvo que apunte con `--url` a un servidor: no hay forma de mandar mensajes reales por accidente desde el simulador.
 - Las cabeceras de seguridad (CSP, X-Frame-Options DENY, no-store, nosniff) van en todas las respuestas: la bandeja muestra datos personales.
 - El nombre de perfil de WhatsApp (lo controla el cliente) se guarda sin caracteres de control y máximo 60, y va a la IA entre comillas JSON marcado como dato del cliente: evita inyección de instrucciones por el nombre (hallazgo de la revisión de seguridad).
+
+## Agregadas en la Etapa 2
+- JWT RS256 de la cuenta de servicio firmado en Python puro (DER + `pow`): verificado byte por byte contra `openssl` con claves PKCS#8 y PKCS#1; evita dependencia (`ponytail:` en el código sobre tiempo no constante).
+- Token de Google en memoria y reutilizado hasta 1 min antes de expirar: una firma por hora, no por petición.
+- El cliente elige con "1/2/3" (también "la 2", "opción 3"); la propuesta vence a las 24 h y otro texto pasa a la IA normal.
+- Horarios propuestos: pasos de 30 min desde el inicio de cada rango, el primero libre y los siguientes separados ≥ 3 h: opciones distintas en vez de 10:00/10:30/11:00.
+- "Cambio simple" = exactamente una cita futura y faltan **más** de 2 h; en cualquier otro caso (cero o varias citas, o muy cerca) pasa a humano.
+- Cancelar requiere "SÍ" explícito; "no" deja la cita: la IA puede malinterpretar "cancelar".
+- Reprogramar: se crea la nueva y solo después se cancela la anterior: nunca queda el cliente sin cita por una falla a mitad.
+- Al reprogramar no se ofrece el mismo horario que ya tiene.
+- Candado de proceso alrededor de "consultar disponibilidad + crear": el bot y la bandeja viven en el mismo proceso `serve`; dos clientes no pueden tomar el mismo horario.
+- Cualquier error de Google (red, permisos, freeBusy con errores) pasa la conversación a humano con motivo `agenda_error`.
+- Agendar desde la bandeja permite cualquier hora futura (el equipo puede hacer excepciones), pero nunca encima de otra cita; avisa al cliente con texto libre o con la plantilla `cita_confirmada` si la ventana está cerrada.
+- Cancelar desde la vista Citas no avisa al cliente: lo hace el equipo, que ya está hablando con él.
+- Citas canceladas directamente en Google Calendar no se sincronizan de regreso: el equipo debe cancelar desde la bandeja (queda en el runbook). Sincronizar sería un webhook de Google más; no se pidió.

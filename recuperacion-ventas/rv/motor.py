@@ -11,6 +11,8 @@ MOTIVOS = {
     "ia_error": "la IA no pudo responder",
     "sin_horarios": "no hay horarios disponibles en línea",
     "escalamiento": "lleva más de 15 minutos sin respuesta",
+    "agenda_error": "falló el calendario",
+    "cambio_cita_complejo": "quiere cancelar o cambiar una cita y no es un caso simple",
 }
 RANGO_ESTADO = {"pendiente": 0, "enviado": 1, "prueba": 1, "sent": 2, "delivered": 3, "read": 4, "failed": 5}
 
@@ -220,13 +222,14 @@ def ejecutar(con, cfg, c, r):
         ejecutar_agenda(con, cfg, c, r)
 
 
-# Agenda: se implementa en la etapa 2 (rv/agenda.py). Mientras tanto, todo lo de citas pasa a humano.
 def ejecutar_agenda(con, cfg, c, r):
-    handoff(con, cfg, c["id"], f"ia:{r['accion']}")
+    from . import agenda  # import diferido: agenda usa motor
+    agenda.ejecutar(con, cfg, c, r)
 
 
 def responder_propuesta(con, cfg, c, tn):
-    return False
+    from . import agenda
+    return agenda.responder_propuesta(con, cfg, c, tn)
 
 
 def procesar_pendientes(con, cfg, limite=100):

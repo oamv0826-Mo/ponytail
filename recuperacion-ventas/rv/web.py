@@ -448,3 +448,12 @@ def servir(cfg):
         srv.serve_forever()
     finally:
         parar.set()
+
+
+# ---------- registro de secciones de etapas posteriores ----------
+from . import agenda  # noqa: E402
+
+EXTRAS_CONVERSACION.append(agenda.html_agendar)
+ACCIONES_EXTRA["agendar"] = agenda.accion_agendar
+PAGINAS_EXTRA["/bandeja/citas"] = agenda.pagina_citas
+RUTAS_POST_EXTRA["/bandeja/citas/marcar"] = agenda.marcar_cita
