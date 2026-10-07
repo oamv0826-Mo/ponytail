@@ -1,0 +1,18 @@
+# Respaldo diario: copia consistente comprimida + copia fuera del servidor con rclone (30 días).
+# Requiere /etc/rv/respaldo.env con RV_RCLONE_DESTINO=remoto:bucket/rv  y rclone configurado para el usuario rv.
+[Unit]
+Description=Recuperación de ventas: respaldo de %i
+
+[Service]
+Type=oneshot
+User=rv
+Group=rv
+WorkingDirectory=/srv/rv/app/recuperacion-ventas
+EnvironmentFile=/etc/rv/respaldo.env
+ExecStart=/usr/bin/python3 -m rv --cliente /srv/rv/clientes/%i respaldo --dias 30
+ExecStart=/usr/bin/rclone copy /srv/rv/clientes/%i/respaldos ${RV_RCLONE_DESTINO}/%i
+ExecStart=/usr/bin/rclone delete --min-age 30d ${RV_RCLONE_DESTINO}/%i
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/srv/rv/clientes/%i -/home/rv/.config/rclone -/home/rv/.cache

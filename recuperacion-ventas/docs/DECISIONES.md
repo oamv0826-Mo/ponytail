@@ -98,3 +98,15 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - La garantía se evalúa por fecha de venta dentro de los 60 días naturales desde `fecha_inicio` (día 1 incluido); antes de que termine el periodo se muestra "EN CURSO".
 - El anexo de contrato incluye exclusiones (no registrar ventas, suspensión por causa del negocio, no entregar la base con consentimiento): son condiciones contractuales, el sistema no las evalúa.
 - Página estática con precios visibles (los mismos que da el bot), horario completo y enlace a Google Maps por dirección; sin JS ni recursos externos.
+
+## Agregadas en la Etapa 5
+- El callback a nivel app de Meta apunta a la instancia del primer cliente (Meta exige que pase la verificación `hub.challenge`; un 200 fijo de Caddy no la pasa). Mensajes de números sin override llegan ahí, se descartan por `phone_number_id` y quedan en el log.
+- `configurar-webhook` hace el `POST /{phone_number_id}` con `webhook_configuration.override_callback_uri` y el mismo `WA_VERIFY_TOKEN` del cliente; se corre a mano en la instalación (cambia la configuración en Meta).
+- `verificar --remoto` busca la URL esperada en toda la respuesta de `?fields=webhook_configuration` en vez de leer un campo fijo: la documentación de Meta no fue accesible desde este entorno para confirmar el nombre exacto del campo (`ponytail:` en el código).
+- `verificar --remoto` solo hace lecturas que no cuestan ni envían nada: datos del número, plantillas, Models API de Anthropic (valida clave y modelo) y freeBusy de Google.
+- `verificar` marca ERROR si no hay usuarios de bandeja, si nadie recibe avisos, o (en producción) si el último tick tiene más de 15 min.
+- El tick guarda `ultimo_tick` en la tabla `estado` en cada corrida: así `verificar` detecta un timer detenido.
+- Una migración que falla hace rollback completo y no cambia `user_version`; además ya existe el respaldo previo.
+- systemd con plantillas de instancia (`rv@<id>`), endurecimiento (`ProtectSystem=strict`, solo escribe en la carpeta del cliente) y timers con `Persistent=true` (si el servidor estuvo apagado, el tick corre al arrancar).
+- Respaldo: local 30 días + `rclone copy` a un remoto externo + `rclone delete --min-age 30d`; el destino va en `/etc/rv/respaldo.env`, fuera del repo.
+- Un solo dominio con una ruta por cliente (`/c/<id>/` para el sistema y `/p/<id>/` para la página estática servida por Caddy).

@@ -276,7 +276,12 @@ def migrar(con, ruta_db=None):
     if pendientes and actual > 0 and ruta_db:
         respaldar(con, Path(ruta_db).parent / "respaldos")
     for v, sql in pendientes:
-        con.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version={v};\nCOMMIT;")
+        try:
+            con.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version={v};\nCOMMIT;")
+        except sqlite3.Error:
+            if con.in_transaction:
+                con.execute("ROLLBACK")
+            raise
 
 
 @contextlib.contextmanager

@@ -7,8 +7,9 @@ import os
 import sys
 import time
 import urllib.request
+from pathlib import Path
 
-from . import base, motor, tick, ventas, wa, web
+from . import base, motor, tick, ventas, verificar, wa, web
 
 
 def payload_falso(telefono, texto=None, nombre="", tipo="text", msg_id=None):
@@ -108,6 +109,30 @@ def cmd_pagina(cfg, args):
     print(f"página escrita en {salida}")
 
 
+def cmd_verificar(cfg, args):
+    with base.db(cfg) as con:
+        resultados = verificar.locales(con, cfg) + (verificar.remotos(con, cfg) if args.remoto else [])
+    for nivel, msg in resultados:
+        print(f"[{nivel:5}] {msg}")
+    if any(n == "ERROR" for n, _ in resultados):
+        sys.exit(1)
+
+
+def cmd_respaldo(cfg, args):
+    destino = Path(args.destino or cfg.carpeta / "respaldos")
+    with base.db(cfg) as con:
+        ruta = base.respaldar(con, destino)
+    limite = time.time() - args.dias * 86400
+    for viejo in destino.glob("datos-*.db.gz"):
+        if viejo.stat().st_mtime < limite:
+            viejo.unlink()
+    print(ruta)
+
+
+def cmd_configurar_webhook(cfg, args):
+    print(json.dumps(verificar.configurar_override(cfg)))
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="rv", description="Sistema de Recuperación de Ventas")
     p.add_argument("--cliente", default=os.environ.get("RV_CLIENTE", "."), help="carpeta del cliente")
@@ -130,6 +155,12 @@ def main(argv=None):
     r.add_argument("--resenas-google", type=int, help="reseñas nuevas en Google en el mes (dato manual)")
     pg = sub.add_parser("pagina", help="página estática que lleva a WhatsApp")
     pg.add_argument("--salida")
+    vf = sub.add_parser("verificar", help="chequeos de instalación y salud")
+    vf.add_argument("--remoto", action="store_true", help="también consulta Meta, Anthropic y Google (solo lectura)")
+    rs = sub.add_parser("respaldo", help="copia comprimida de la base; borra copias locales viejas")
+    rs.add_argument("--destino")
+    rs.add_argument("--dias", type=int, default=30)
+    sub.add_parser("configurar-webhook", help="apunta el webhook del número a url_publica/webhook (instalación)")
     u = sub.add_parser("usuario", help="crea o cambia la contraseña de un usuario de la bandeja")
     u.add_argument("nombre")
     u.add_argument("--clave-stdin", action="store_true")
@@ -141,7 +172,9 @@ def main(argv=None):
      "usuario": lambda: cmd_usuario(cfg, args), "tick": lambda: cmd_tick(cfg, args),
      "importar-clientes": lambda: cmd_importar_clientes(cfg, args),
      "importar-ventas": lambda: cmd_importar_ventas(cfg, args), "reporte": lambda: cmd_reporte(cfg, args),
-     "pagina": lambda: cmd_pagina(cfg, args)}[args.cmd]()
+     "pagina": lambda: cmd_pagina(cfg, args), "verificar": lambda: cmd_verificar(cfg, args),
+     "respaldo": lambda: cmd_respaldo(cfg, args),
+     "configurar-webhook": lambda: cmd_configurar_webhook(cfg, args)}[args.cmd]()
 
 
 if __name__ == "__main__":

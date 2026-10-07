@@ -212,6 +212,7 @@ PASOS = [avisos_pendientes, escalamientos, recordatorios, resenas, seguimiento, 
 def correr(con, cfg):
     """Ejecuta cada paso; la falla de uno no detiene a los demás. Devuelve {paso: enviados | 'error'}."""
     t = base.ahora()
+    base.set_estado(con, "ultimo_tick", base.iso(t))
     resumen = {}
     for paso in PASOS:
         try:

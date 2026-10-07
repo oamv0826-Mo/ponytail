@@ -21,6 +21,27 @@ python3 -m rv --cliente /tmp/demo simular --url http://127.0.0.1:8080 --texto "q
 Abre la bandeja exactamente en la `url_publica` del config (`http://127.0.0.1:8080`): los POST de otro
 origen se rechazan.
 
+## Comandos
+
+`python3 -m rv --cliente <carpeta> <comando>`
+
+| Comando | Para qué |
+|---|---|
+| `serve` | webhook de Meta + bandeja web (servicio `rv@<id>`) |
+| `tick` | envíos programados (timer cada 5 min) |
+| `simular` | mensaje falso de WhatsApp (solo modo prueba) |
+| `usuario <nombre>` | crea o cambia la contraseña de la bandeja |
+| `importar-clientes clientes.csv` | base para reactivación (`nombre,telefono,ultima_visita,consentimiento`) |
+| `importar-ventas ventas.csv` | ventas (`telefono,fecha,monto`) |
+| `reporte [AAAA-MM] [--resenas-google N]` | reporte mensual con garantía |
+| `pagina [--salida archivo]` | página estática con botón a WhatsApp |
+| `verificar [--remoto]` | chequeos de instalación y salud |
+| `respaldo` | copia comprimida de la base |
+| `configurar-webhook` | dirige el webhook del número a este cliente (instalación) |
+
+Operación: [docs/runbook.md](docs/runbook.md) · Instalación: [docs/checklist-instalacion.md](docs/checklist-instalacion.md) ·
+Plantillas para Meta: [docs/plantillas.md](docs/plantillas.md) · Anexo de contrato: [docs/anexo-contrato.md](docs/anexo-contrato.md).
+
 ## Pruebas
 
 ```bash

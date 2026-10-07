@@ -48,8 +48,10 @@ systemd timer (5 min) ──▶ rv tick ──▶ envíos proactivos (plantillas
 ### 2.1 Webhook
 
 - Override de callback **por número** (`override_callback_uri`): Meta entrega cada número directo a la
-  ruta de su cliente. Sin router propio. El callback de la app apunta a una ruta de Caddy que solo
-  responde 200 y deja log (detecta números sin override).
+  ruta de su cliente. Sin router propio. El callback de la app (obligatorio en Meta y verificado con
+  `hub.challenge`) apunta a la instancia del primer cliente: si algún número quedara sin override, sus
+  mensajes llegan ahí, se descartan por `phone_number_id` distinto y quedan en el log (señal de que falta
+  el override). `verificar --remoto` revisa el override de cada número.
 - `GET /webhook`: verificación `hub.challenge` con `WA_VERIFY_TOKEN`.
 - `POST /webhook`:
   1. lee el cuerpo crudo;
@@ -195,7 +197,9 @@ igual que Meta. Sin `ANTHROPIC_API_KEY` usa la IA simulada; con `agenda.proveedo
 - systemd: `rv@<id>.service` (serve), `rv-tick@<id>.timer` (5 min), `rv-respaldo@<id>.timer` (diario).
 - Actualizar: `git pull` + `systemctl restart 'rv@*'` (migraciones al arrancar).
 - Respaldo: `respaldo` (API de backup de SQLite + gzip) → `rclone` a almacenamiento externo, 30 días.
-- `verificar`: config, secretos, base, plantillas aprobadas, override del webhook, acceso al calendario.
+- `verificar` (`--remoto` para Meta/Anthropic/Google, solo lectura): config, secretos, base, usuarios,
+  último tick, plantillas aprobadas, override del webhook, clave de IA, acceso al calendario.
+- Guías: [runbook.md](runbook.md) (operación) y [checklist-instalacion.md](checklist-instalacion.md).
 - Límite conocido: un VPS es punto único de falla; Meta reintenta hasta 7 días. ~10 instancias.
 
 ## 6. Etapas
