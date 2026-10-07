@@ -160,12 +160,28 @@ def ocupados(con, cfg, t0, t1, excluir_cita=None):
     filas = con.execute("SELECT id, inicio, fin FROM cita WHERE estado='agendada' AND fin>? AND inicio<?",
                         (base.iso(t0 - margen), base.iso(t1 + margen))).fetchall()
     propios = [(base.de_iso(f["inicio"]), base.de_iso(f["fin"])) for f in filas if f["id"] != excluir_cita]
-    evento_excluido = None
+    externos = ocupado_google(cfg, t0 - margen, t1 + margen)
     if excluir_cita:
+        # Google recorta los bloques a la ventana consultada y une los contiguos: se resta el intervalo de la
+        # cita que se reprograma en vez de compararlo exacto.
         r = con.execute("SELECT inicio, fin FROM cita WHERE id=?", (excluir_cita,)).fetchone()
-        evento_excluido = r and (base.de_iso(r["inicio"]), base.de_iso(r["fin"]))
-    externos = [x for x in ocupado_google(cfg, t0 - margen, t1 + margen) if x != evento_excluido]
+        if r:
+            externos = restar(externos, base.de_iso(r["inicio"]), base.de_iso(r["fin"]))
     return [(a - margen, b + margen) for a, b in propios + externos]
+
+
+def restar(intervalos, x, y):
+    """Intervalos menos [x, y)."""
+    out = []
+    for a, b in intervalos:
+        if b <= x or a >= y:
+            out.append((a, b))
+            continue
+        if a < x:
+            out.append((a, x))
+        if b > y:
+            out.append((y, b))
+    return out
 
 
 def libre(intervalos, inicio, fin):
@@ -233,8 +249,13 @@ def proponer(con, cfg, c, servicio_id, reprograma=None):
 
 
 def reservar(con, cfg, c, servicio_id, inicio, creado_por="bot", reprograma=None):
-    """Revisa disponibilidad justo antes de crear. Devuelve id de cita, o None si el horario ya no está libre."""
+    """Revisa disponibilidad justo antes de crear. Devuelve id de cita, o None si el horario ya no sirve
+    (ocupado, en el pasado, o para el bot, con menos anticipación que la configurada)."""
     fin = inicio + duracion(cfg, servicio_id)
+    minimo = base.ahora() + (dt.timedelta(hours=float(cfg["agenda"]["anticipacion_min_horas"]))
+                             if creado_por == "bot" else dt.timedelta(0))
+    if inicio < minimo:   # mismo límite que horarios_libres (>=)
+        return None
     with LOCK:
         if not libre(ocupados(con, cfg, inicio, fin, excluir_cita=reprograma), inicio, fin):
             return None
@@ -246,7 +267,15 @@ def reservar(con, cfg, c, servicio_id, inicio, creado_por="bot", reprograma=None
     con.execute("UPDATE contacto SET seg_activo=0, propuesta=NULL WHERE id=?", (c["id"],))
     base.evento(con, c["id"], "cita", str(cid))
     if reprograma:
-        cancelar(con, cfg, reprograma)
+        anterior = con.execute("SELECT estado FROM cita WHERE id=?", (reprograma,)).fetchone()
+        if anterior and anterior["estado"] == "agendada":   # si ya se marcó Asistió/No asistió, no se toca
+            try:
+                cancelar(con, cfg, reprograma)
+            except AgendaError as e:
+                # la cita nueva ya existe: se cancela la anterior en la base y se pide al equipo borrar el evento
+                base.log("agenda: no se pudo borrar el evento anterior:", e)
+                con.execute("UPDATE cita SET estado='cancelada' WHERE id=?", (reprograma,))
+                motor.avisar_equipo(con, cfg, c, "evento_huerfano")
     return cid
 
 
@@ -374,7 +403,7 @@ def accion_agendar(con, cfg, c, usuario, form):
     if ventana_abierta(c):
         motor.responder(con, cfg, c, cfg.msg["cita_confirmada"].format(servicio=nombre, fecha=fecha),
                         autor=f"humano:{usuario}")
-    elif not con.execute("SELECT 1 FROM optout WHERE telefono=?", (c["telefono"],)).fetchone():
+    elif not base.dio_baja(con, c["telefono"]):
         wa.enviar(con, cfg, c["telefono"], plantilla="cita_confirmada", params=[c["nombre"], nombre, cfg["nombre"], fecha],
                   contacto_id=c["id"], autor=f"humano:{usuario}", destino=c["wa_id"])
     return None

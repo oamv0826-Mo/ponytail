@@ -127,3 +127,9 @@ CREATE TABLE estado (                          -- pares clave/valor de la instan
   clave TEXT PRIMARY KEY,
   valor TEXT NOT NULL
 );
+
+-- version: 2
+-- Recuperación tras caída: una entrada reclamada (procesado) sin terminar se vuelve a procesar.
+ALTER TABLE entrada ADD COLUMN terminado TEXT;
+UPDATE entrada SET terminado = procesado WHERE procesado IS NOT NULL;
+CREATE INDEX entrada_sin_terminar ON entrada(terminado, id);

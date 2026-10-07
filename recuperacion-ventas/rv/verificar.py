@@ -53,7 +53,7 @@ def locales(con, cfg):
     hace7 = base.iso(base.ahora() - dt.timedelta(days=7))
     fallidos = con.execute("SELECT COUNT(*) FROM mensaje WHERE estado IN ('error','failed') AND creado>?", (hace7,)).fetchone()[0]
     (aviso if fallidos else ok)(f"envíos fallidos en 7 días: {fallidos}")
-    pend = con.execute("SELECT COUNT(*) FROM entrada WHERE procesado IS NULL").fetchone()[0]
+    pend = con.execute("SELECT COUNT(*) FROM entrada WHERE terminado IS NULL").fetchone()[0]
     (aviso if pend > 20 else ok)(f"cola pendiente: {pend}")
     ultimo = base.get_estado(con, "ultimo_tick")
     if not prueba:

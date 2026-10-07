@@ -29,14 +29,14 @@ for c in /srv/rv/clientes/*/; do sudo -u rv python3 -m rv --cliente "$c" verific
 ```
 
 ## Respaldo y restauración
-- Automático cada noche: `respaldos/datos-AAAAMMDD-HHMMSS.db.gz` local (30 días) y copia en `RV_RCLONE_DESTINO/<id>` (30 días).
+- Automático cada noche: `respaldos/datos-AAAAMMDD-HHMMSS-PID.db.gz` local (30 días) y copia en `RV_RCLONE_DESTINO/<id>` (30 días).
 - Manual: `rv respaldo`.
 - Restaurar:
   ```bash
   systemctl stop rv@<id> rv-tick@<id>.timer
   cd /srv/rv/clientes/<id>
   mv datos.db datos.db.danado; rm -f datos.db-wal datos.db-shm
-  gunzip -c respaldos/datos-AAAAMMDD-HHMMSS.db.gz > datos.db   # o: rclone copy remoto:... .
+  gunzip -c respaldos/datos-AAAAMMDD-HHMMSS-PID.db.gz > datos.db   # o: rclone copy remoto:... .
   chown rv:rv datos.db
   systemctl start rv@<id> rv-tick@<id>.timer
   rv verificar

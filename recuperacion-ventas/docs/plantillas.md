@@ -84,7 +84,7 @@ Se envían dentro de la ventana de 24 h, porque el cliente acaba de escribir. Vi
 | `baja` | Listo, ya no te enviaremos mensajes. Si nos escribes, con gusto te atendemos. |
 | `propuesta` | Para {servicio} tengo estos horarios:\n{opciones}\nResponde con el número que prefieras. |
 | `sin_horarios` | Por ahora no tengo horarios disponibles en línea. (seguido del mensaje de handoff) |
-| `horario_ocupado` | Ese horario se acaba de ocupar. |
+| `horario_ocupado` | Ese horario ya no está disponible. |
 | `cita_confirmada` | Listo, tu cita de {servicio} quedó para el {fecha}. Te enviaremos un recordatorio. |
 | `confirmar_cancelacion` | ¿Confirmas que cancelamos tu cita de {servicio} del {fecha}? Responde SÍ para cancelar. |
 | `cita_cancelada` | Tu cita del {fecha} quedó cancelada. Si quieres otro horario, dime y te propongo opciones. |

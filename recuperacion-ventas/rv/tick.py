@@ -6,15 +6,25 @@ from . import base, motor, wa
 POR_TICK_REACTIVACION = 10   # reparte el lote diario para no saturar al equipo con respuestas simultáneas
 
 
+MAX_INTENTOS = 3   # fallas del mismo envío en 24 h antes de rendirse
+
+
 def puede_proactivo(con, cfg, c):
     """Opt-out global y exclusión de equipo/dueño: se revisa antes de cada envío proactivo."""
-    return c["telefono"] not in cfg.internos and \
-        con.execute("SELECT 1 FROM optout WHERE telefono=?", (c["telefono"],)).fetchone() is None
+    return c["telefono"] not in cfg.internos and not base.dio_baja(con, c["telefono"])
 
 
 def _plantilla(con, cfg, c, nombre, params):
-    return wa.enviar(con, cfg, c["telefono"], plantilla=nombre, params=params, contacto_id=c["id"],
-                     autor="sistema", destino=c["wa_id"])[1]
+    """'ok' si salió; 'reintentar' si falló (se intenta en el siguiente tick); 'agotado' tras MAX_INTENTOS fallas.
+
+    ponytail: si Meta aceptó el envío pero la respuesta se perdió (timeout), el reintento puede duplicarlo;
+    es preferible a no enviar un recordatorio."""
+    if wa.enviar(con, cfg, c["telefono"], plantilla=nombre, params=params, contacto_id=c["id"],
+                 autor="sistema", destino=c["wa_id"])[1]:
+        return "ok"
+    fallas = con.execute("SELECT COUNT(*) FROM mensaje WHERE contacto_id=? AND plantilla=? AND estado='error' "
+                         "AND creado>?", (c["id"], nombre, base.iso(base.ahora() - dt.timedelta(hours=24)))).fetchone()[0]
+    return "agotado" if fallas >= MAX_INTENTOS else "reintentar"
 
 
 # ---------- avisos al equipo ----------
@@ -81,10 +91,11 @@ def recordatorios(con, cfg, t):
             if momento is None or t < momento:
                 continue
             servicio = cfg.servicios.get(f["servicio_id"], {}).get("nombre", f["servicio_id"])
-            _plantilla(con, cfg, c, "recordatorio_cita",
-                       [c["nombre"], servicio, base.fecha_humana(cfg, inicio), cfg.get("direccion", cfg["nombre"])])
-            con.execute(f"UPDATE cita SET {campo}=? WHERE id=?", (base.iso(t), f["id"]))
-            n += 1
+            r = _plantilla(con, cfg, c, "recordatorio_cita",
+                           [c["nombre"], servicio, base.fecha_humana(cfg, inicio), cfg.get("direccion", cfg["nombre"])])
+            if r != "reintentar":
+                con.execute(f"UPDATE cita SET {campo}=? WHERE id=?", (base.iso(t) if r == "ok" else "error", f["id"]))
+            n += r == "ok"
     return n
 
 
@@ -105,10 +116,13 @@ def resenas(con, cfg, t):
         if reciente or viejo or not puede_proactivo(con, cfg, f):
             con.execute("UPDATE cita SET resena_enviada='omitida' WHERE id=?", (f["cita_id"],))
             continue
-        _plantilla(con, cfg, f, "resena", [f["nombre"], cfg["nombre"], r["link"]])
-        con.execute("UPDATE cita SET resena_enviada=? WHERE id=?", (base.iso(t), f["cita_id"]))
-        base.evento(con, f["id"], "resena")
-        n += 1
+        res = _plantilla(con, cfg, f, "resena", [f["nombre"], cfg["nombre"], r["link"]])
+        if res != "reintentar":
+            con.execute("UPDATE cita SET resena_enviada=? WHERE id=?", (base.iso(t) if res == "ok" else "error",
+                                                                      f["cita_id"]))
+        if res == "ok":
+            base.evento(con, f["id"], "resena")
+            n += 1
     return n
 
 
@@ -133,11 +147,14 @@ def seguimiento(con, cfg, t):
             continue
         servicio = cfg.servicios.get(c["seg_servicio"] or "", {}).get("nombre", "nuestros servicios")
         params = {0: [c["nombre"], servicio], 1: [c["nombre"], cfg["nombre"], servicio], 2: [c["nombre"], servicio]}
-        _plantilla(con, cfg, c, f"seguimiento_{paso + 1}", params.get(paso, params[2]))
+        res = _plantilla(con, cfg, c, f"seguimiento_{paso + 1}", params.get(paso, params[2]))
+        if res == "reintentar":
+            continue
         con.execute("UPDATE contacto SET seg_paso=?, seg_activo=? WHERE id=?",
                     (paso + 1, int(paso + 1 < len(dias)), c["id"]))
-        base.evento(con, c["id"], "seguimiento", str(paso + 1))
-        n += 1
+        if res == "ok":
+            base.evento(con, c["id"], "seguimiento", str(paso + 1))
+            n += 1
     return n
 
 
@@ -199,10 +216,13 @@ def reactivacion(con, cfg, t):
             break
         if not puede_proactivo(con, cfg, c):
             continue
-        _plantilla(con, cfg, c, "reactivacion", [c["nombre"], cfg["nombre"]])
-        con.execute("UPDATE contacto SET reactivacion_enviada=? WHERE id=?", (base.iso(t), c["id"]))
-        base.evento(con, c["id"], "reactivacion")
-        n += 1
+        res = _plantilla(con, cfg, c, "reactivacion", [c["nombre"], cfg["nombre"]])
+        if res != "reintentar":
+            con.execute("UPDATE contacto SET reactivacion_enviada=? WHERE id=?",
+                        (base.iso(t) if res == "ok" else "error", c["id"]))
+        if res == "ok":
+            base.evento(con, c["id"], "reactivacion")
+            n += 1
     return n
 
 

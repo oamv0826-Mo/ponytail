@@ -110,3 +110,16 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - systemd con plantillas de instancia (`rv@<id>`), endurecimiento (`ProtectSystem=strict`, solo escribe en la carpeta del cliente) y timers con `Persistent=true` (si el servidor estuvo apagado, el tick corre al arrancar).
 - Respaldo: local 30 días + `rclone copy` a un remoto externo + `rclone delete --min-age 30d`; el destino va en `/etc/rv/respaldo.env`, fuera del repo.
 - Un solo dominio con una ruta por cliente (`/c/<id>/` para el sistema y `/p/<id>/` para la página estática servida por Caddy).
+
+## Correcciones de la revisión de código final (cada una con su prueba en tests/test_revision.py)
+- `Referrer-Policy: same-origin` (antes `no-referrer`): con `no-referrer` los navegadores mandan `Origin: null` en los POST y la revisión anti-CSRF rechazaba hasta el login.
+- Un horario propuesto que ya pasó o ya no cumple la anticipación mínima no se agenda aunque la propuesta siga vigente: se responde "ya no está disponible" y se proponen nuevos.
+- Reprogramar con Google: se resta el intervalo de la cita propia a lo ocupado en Google (que recorta y une bloques), en vez de compararlo exacto.
+- Reprogramar: si falla borrar el evento anterior en Google, la cita anterior se cancela en la base, el cliente recibe su confirmación y el equipo recibe aviso para borrar el evento a mano; si la cita anterior ya se marcó Asistió/No asistió, no se toca.
+- Red de seguridad en el motor: cualquier excepción al atender un mensaje (no solo errores de la IA) pasa la conversación a humano (`error_interno`) y queda registrada en la cola.
+- Recuperación tras caída (esquema v2, columna `entrada.terminado`): una entrada reclamada y sin terminar por más de 2 min se vuelve a procesar; si el mensaje ya estaba guardado y nadie le respondió, se atiende; si ya se respondió, no se duplica.
+- Envíos del tick: solo se marcan como hechos si Meta los aceptó; si fallan se reintentan en los siguientes ticks y tras 3 fallas en 24 h se marcan `error` (los reportes solo cuentan envíos reales).
+- Respaldo con archivo temporal único y copia en flujo (sin cargar la base en memoria); el nombre lleva el PID para que dos respaldos del mismo segundo no se pisen.
+- `precio_mxn` numérico y `duracion_min` entero son obligatorios al cargar el config: un error de captura no rompe la IA en producción.
+- Texto del escalamiento sin minutos fijos (el umbral es configurable).
+- La revisión de opt-out vive en un solo lugar (`base.dio_baja`).

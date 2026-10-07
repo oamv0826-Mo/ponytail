@@ -120,11 +120,12 @@ class Respaldo(Caso):
         self.assertEqual(len(list((self.dir / "respaldos").glob("datos-*.db.gz"))), 1)
 
     def test_migracion_fallida_no_cambia_version(self):
-        rotas = base.secciones_esquema() + [(2, "CREATE TABLE ok_a (x); ESTO NO ES SQL;")]
+        ultima = base.secciones_esquema()[-1][0]
+        rotas = base.secciones_esquema() + [(ultima + 1, "CREATE TABLE ok_a (x); ESTO NO ES SQL;")]
         with mock.patch.object(base, "secciones_esquema", return_value=rotas), self.assertRaises(sqlite3.Error):
             base.migrar(self.con, self.dir / "datos.db")
         self.assertFalse(self.con.in_transaction)
-        self.assertEqual(self.con.execute("PRAGMA user_version").fetchone()[0], 1)
+        self.assertEqual(self.con.execute("PRAGMA user_version").fetchone()[0], ultima)
         self.assertIsNone(self.con.execute("SELECT 1 FROM sqlite_master WHERE name='ok_a'").fetchone())
 
 

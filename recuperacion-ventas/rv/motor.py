@@ -10,7 +10,9 @@ MOTIVOS = {
     "tope_ia": "se alcanzó el tope mensual de IA",
     "ia_error": "la IA no pudo responder",
     "sin_horarios": "no hay horarios disponibles en línea",
-    "escalamiento": "lleva más de 15 minutos sin respuesta",
+    "escalamiento": "sigue sin respuesta del equipo",
+    "evento_huerfano": "se reprogramó una cita pero no se pudo borrar el evento anterior de Google Calendar; bórralo a mano",
+    "error_interno": "error interno al procesar el mensaje",
     "agenda_error": "falló el calendario",
     "calidad_roja": "la calidad del número de WhatsApp está en rojo; la reactivación quedó en pausa",
     "cambio_cita_complejo": "quiere cancelar o cambiar una cita y no es un caso simple",
@@ -102,7 +104,7 @@ def datos_sistema(con, cfg, c):
 
 # ---------- entrada ----------
 
-def procesar_item(con, cfg, item):
+def procesar_item(con, cfg, item, reintento=False):
     pnid = cfg["whatsapp"].get("phone_number_id")
     if pnid and item.get("pnid") and item["pnid"] != pnid:
         base.log("item de otro número ignorado", item["pnid"])
@@ -110,7 +112,7 @@ def procesar_item(con, cfg, item):
     if item["tipo"] == "estado":
         actualizar_estado(con, item["estado"])
     else:
-        procesar_mensaje(con, cfg, item)
+        procesar_mensaje(con, cfg, item, reintento)
 
 
 def actualizar_estado(con, s):
@@ -126,8 +128,11 @@ def limpiar_nombre(nombre):
     return "".join(ch for ch in str(nombre or "") if ch.isprintable())[:60].strip()
 
 
-def guardar_entrante(con, cfg, item):
-    """Crea/actualiza el contacto y guarda el mensaje. Devuelve (contacto, texto|None) o None si se ignora."""
+def guardar_entrante(con, cfg, item, reintento=False):
+    """Crea/actualiza el contacto y guarda el mensaje. Devuelve (contacto, texto|None) o None si se ignora.
+
+    reintento: la entrada quedó a medias por una caída; si el mensaje ya estaba guardado pero nadie le
+    respondió todavía, se sigue procesando en lugar de tratarlo como duplicado."""
     m = item["msg"]
     tel = base.normalizar_tel(m.get("from"))
     if not tel or tel in cfg.internos:
@@ -149,7 +154,12 @@ def guardar_entrante(con, cfg, item):
                        texto if texto is not None else f"[{m.get('type', 'desconocido')}]", "cliente", m["id"],
                        "recibido", base.iso(ts)))
     if cur.rowcount == 0:
-        return None  # duplicado
+        if not reintento:
+            return None  # duplicado
+        previo = con.execute("SELECT id FROM mensaje WHERE wa_id=?", (m["id"],)).fetchone()
+        if con.execute("SELECT 1 FROM mensaje WHERE contacto_id=? AND direccion='out' AND id>?",
+                       (c["id"], previo["id"])).fetchone():
+            return None  # ya se había respondido antes de la caída
     if not c["primer_entrante"]:
         con.execute("UPDATE contacto SET primer_entrante=? WHERE id=?", (base.iso(ts), c["id"]))
         if not base.abierto(cfg, ts):
@@ -159,11 +169,24 @@ def guardar_entrante(con, cfg, item):
     return contacto(con, c["id"]), texto
 
 
-def procesar_mensaje(con, cfg, item):
-    r = guardar_entrante(con, cfg, item)
+def procesar_mensaje(con, cfg, item, reintento=False):
+    r = guardar_entrante(con, cfg, item, reintento)
     if r is None:
         return
     c, texto = r
+    try:
+        atender(con, cfg, c, texto)
+    except Exception as e:  # red de seguridad: ningún error deja al cliente sin respuesta ni al equipo sin aviso
+        base.log("error atendiendo mensaje:", repr(e))
+        try:
+            if contacto(con, c["id"])["estado"] != "humano":
+                handoff(con, cfg, c["id"], "error_interno")
+        except Exception as e2:
+            base.log("tampoco se pudo pasar a humano:", repr(e2))
+        raise
+
+
+def atender(con, cfg, c, texto):
     tn = base.normalizar_texto(texto or "")
 
     if texto is not None and tn in cfg.palabras["baja"]:
@@ -198,8 +221,8 @@ def procesar_mensaje(con, cfg, item):
         return
     try:
         r = ia.consultar(con, cfg, c["id"], datos_sistema(con, cfg, c))
-    except ia.IAError as e:
-        base.log("IA:", e)
+    except Exception as e:  # IAError y cualquier otra falla (red, respuesta truncada): el cliente nunca queda sin respuesta
+        base.log("IA:", repr(e))
         handoff(con, cfg, c["id"], "ia_error")
         return
     if r["intencion"] in ("precio", "info"):
@@ -233,20 +256,26 @@ def responder_propuesta(con, cfg, c, tn):
     return agenda.responder_propuesta(con, cfg, c, tn)
 
 
+RECLAMO_VENCIDO = dt.timedelta(minutes=2)  # una entrada reclamada y sin terminar por más de esto: el proceso cayó
+
+
 def procesar_pendientes(con, cfg, limite=100):
-    """Procesa la cola en orden. Cada entrada se reclama con UPDATE para que dos procesos no la tomen."""
+    """Procesa la cola en orden. Cada entrada se reclama con UPDATE (dos procesos no toman la misma) y se marca
+    terminada al final; si el proceso muere a la mitad, otra corrida la retoma pasado RECLAMO_VENCIDO."""
     hechos = 0
-    filas = con.execute("SELECT id, payload FROM entrada WHERE procesado IS NULL ORDER BY id LIMIT ?",
-                        (limite,)).fetchall()
+    vencido = base.iso(base.ahora() - RECLAMO_VENCIDO)
+    filas = con.execute("SELECT id, payload, procesado FROM entrada WHERE terminado IS NULL AND "
+                        "(procesado IS NULL OR procesado<?) ORDER BY id LIMIT ?", (vencido, limite)).fetchall()
     for f in filas:
-        if con.execute("UPDATE entrada SET procesado=? WHERE id=? AND procesado IS NULL",
-                       (base.iso(base.ahora()), f["id"])).rowcount == 0:
+        if con.execute("UPDATE entrada SET procesado=? WHERE id=? AND terminado IS NULL AND "
+                       "(procesado IS NULL OR procesado<?)", (base.iso(base.ahora()), f["id"], vencido)).rowcount == 0:
             continue
         try:
-            procesar_item(con, cfg, json.loads(f["payload"]))
+            procesar_item(con, cfg, json.loads(f["payload"]), reintento=f["procesado"] is not None)
         except Exception as e:  # una entrada rota no detiene la cola; queda registrada
             base.log("error procesando entrada", f["id"], repr(e))
             con.execute("UPDATE entrada SET error=? WHERE id=?", (repr(e)[:500], f["id"]))
+        con.execute("UPDATE entrada SET terminado=? WHERE id=?", (base.iso(base.ahora()), f["id"]))
         hechos += 1
     return hechos
 

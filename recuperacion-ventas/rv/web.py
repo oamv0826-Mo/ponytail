@@ -178,7 +178,7 @@ def html_mensajes(con, cfg, cid):
 
 def html_conversacion(con, cfg, c, usuario):
     bp, cid = e(cfg.base_path), c["id"]
-    optout = con.execute("SELECT 1 FROM optout WHERE telefono=?", (c["telefono"],)).fetchone()
+    optout = base.dio_baja(con, c["telefono"])
     abierta = ventana_abierta(c)
     accion = lambda ruta, texto: (f"<form class='inline' method='post' action='{bp}/bandeja/c/{cid}/{ruta}'>"  # noqa: E731
                                   f"<button>{texto}</button></form>")
@@ -234,7 +234,7 @@ def accion_conversacion(con, cfg, c, usuario, nombre, form):
         _, ok = motor.responder(con, cfg, c, texto[:2000], autor=f"humano:{usuario}")
         return None if ok else "No se pudo enviar (ver el error en el mensaje)."
     elif nombre == "retomar":
-        if con.execute("SELECT 1 FROM optout WHERE telefono=?", (c["telefono"],)).fetchone():
+        if base.dio_baja(con, c["telefono"]):
             return "El contacto dio de baja."
         if not base.en_ventana_envio(cfg, base.ahora()):
             return "Fuera del horario de envío (9:00 a 20:00, lunes a sábado)."
@@ -278,7 +278,9 @@ def crear_servidor(cfg, host="127.0.0.1", puerto=None):
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Frame-Options", "DENY")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Referrer-Policy", "no-referrer")
+            # same-origin (no no-referrer): con no-referrer el navegador manda "Origin: null" en los POST y la
+            # revisión anti-CSRF rechazaría todos los formularios.
+            self.send_header("Referrer-Policy", "same-origin")
             self.send_header("Content-Security-Policy",
                              "default-src 'self'; script-src 'unsafe-inline' 'self'; style-src 'unsafe-inline'; "
                              "form-action 'self'; frame-ancestors 'none'")

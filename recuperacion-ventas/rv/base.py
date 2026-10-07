@@ -5,8 +5,10 @@ import gzip
 import json
 import os
 import re
+import shutil
 import sqlite3
 import sys
+import tempfile
 import unicodedata
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -28,7 +30,7 @@ MENSAJES = {
     "baja": "Listo, ya no te enviaremos mensajes. Si nos escribes, con gusto te atendemos.",
     "propuesta": "Para {servicio} tengo estos horarios:\n{opciones}\nResponde con el número que prefieras.",
     "sin_horarios": "Por ahora no tengo horarios disponibles en línea.",
-    "horario_ocupado": "Ese horario se acaba de ocupar.",
+    "horario_ocupado": "Ese horario ya no está disponible.",
     "cita_confirmada": "Listo, tu cita de {servicio} quedó para el {fecha}. Te enviaremos un recordatorio.",
     "confirmar_cancelacion": "¿Confirmas que cancelamos tu cita de {servicio} del {fecha}? Responde SÍ para cancelar.",
     "cita_cancelada": "Tu cita del {fecha} quedó cancelada. Si quieres otro horario, dime y te propongo opciones.",
@@ -110,8 +112,10 @@ class Config(dict):
                 if len(r) != 2 or not all(re.fullmatch(r"\d\d:\d\d", h) for h in r) or r[0] >= r[1]:
                     errores.append(f"rango inválido en {dia}: {r}")
         for s in self.get("servicios", []):
-            if not s.get("id") or not s.get("nombre") or int(s.get("duracion_min", 0)) <= 0:
-                errores.append(f"servicio incompleto: {s}")
+            precio = s.get("precio_mxn")
+            if not s.get("id") or not s.get("nombre") or not isinstance(s.get("duracion_min"), int) \
+                    or s["duracion_min"] <= 0 or isinstance(precio, bool) or not isinstance(precio, (int, float)) or precio < 0:
+                errores.append(f"servicio incompleto (id, nombre, precio_mxn numérico ≥ 0, duracion_min entero > 0): {s}")
         if errores:
             raise ValueError("cliente.json inválido: " + "; ".join(errores))
 
@@ -304,20 +308,27 @@ def respaldar(con, destino):
     """Copia consistente (API de backup de SQLite) comprimida con gzip. Devuelve la ruta."""
     destino = Path(destino)
     destino.mkdir(parents=True, exist_ok=True)
-    tmp = destino / "tmp-respaldo.db"
-    copia = sqlite3.connect(tmp)
-    con.backup(copia)
-    copia.close()
-    salida = destino / f"datos-{ahora().strftime('%Y%m%d-%H%M%S')}.db.gz"
-    with open(tmp, "rb") as f, gzip.open(salida, "wb") as g:
-        g.write(f.read())
-    tmp.unlink()
+    fd, tmp = tempfile.mkstemp(prefix="tmp-respaldo-", suffix=".db", dir=destino)  # único: respaldos simultáneos
+    os.close(fd)
+    try:
+        copia = sqlite3.connect(tmp)
+        con.backup(copia)
+        copia.close()
+        salida = destino / f"datos-{ahora().strftime('%Y%m%d-%H%M%S')}-{os.getpid()}.db.gz"
+        with open(tmp, "rb") as f, gzip.open(salida, "wb") as g:
+            shutil.copyfileobj(f, g)
+    finally:
+        os.unlink(tmp)
     return salida
 
 
 def evento(con, contacto_id, tipo, detalle="", creado=None):
     con.execute("INSERT INTO evento (contacto_id, tipo, creado, detalle) VALUES (?,?,?,?)",
                 (contacto_id, tipo, iso(creado or ahora()), detalle))
+
+
+def dio_baja(con, telefono):
+    return con.execute("SELECT 1 FROM optout WHERE telefono=?", (telefono,)).fetchone() is not None
 
 
 def get_estado(con, clave, defecto=None):
