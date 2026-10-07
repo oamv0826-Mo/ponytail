@@ -352,7 +352,7 @@ def html_venta_en_cita(con, cfg, f):
     if f["estado"] != "asistio" or con.execute("SELECT 1 FROM venta WHERE cita_id=?", (f["id"],)).fetchone():
         return ""
     bp = html.escape(cfg.base_path)
-    fecha = base.de_iso(f["inicio"]).astimezone(cfg.tz).date().isoformat()
+    fecha = min(base.de_iso(f["inicio"]).astimezone(cfg.tz).date(), base.ahora().astimezone(cfg.tz).date()).isoformat()
     return (f"<form class='inline' method='post' action='{bp}/bandeja/c/{f['contacto_id']}/venta'>"
             f"<input type='hidden' name='cita' value='{f['id']}'><input type='hidden' name='fecha' value='{fecha}'>"
             f"<label>Venta $ <input name='monto' size='7' inputmode='decimal' required "

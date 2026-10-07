@@ -237,6 +237,7 @@ class BandejaCitas(Caso):
         # mismo horario otra vez → ocupado
         self.assertEqual(agenda.accion_agendar(self.con, self.cfg, c, "ana", {"servicio": ["valoracion"],
                          "fecha": ["2026-10-07"], "hora": ["17:00"]}), "Ese horario está ocupado.")
+        self.t = local(2026, 10, 7, 17, 40)          # el día de la cita: ya se puede marcar asistencia
         pagina = agenda.pagina_citas(self.con, self.cfg, "ana", {})
         self.assertIn("Cliente", pagina)
         self.assertIn(">Asistió</button>", pagina)

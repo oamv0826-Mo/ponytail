@@ -123,3 +123,4 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - `precio_mxn` numérico y `duracion_min` entero son obligatorios al cargar el config: un error de captura no rompe la IA en producción.
 - Texto del escalamiento sin minutos fijos (el umbral es configurable).
 - La revisión de opt-out vive en un solo lugar (`base.dio_baja`).
+- (Encontrado al probar la bandeja en Chromium real) "Asistió"/"No asistió" solo se pueden marcar el día de la cita o después, y la fecha de la venta desde una cita nunca es futura: antes se podía marcar asistencia de una cita futura y la venta se rechazaba.

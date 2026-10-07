@@ -426,12 +426,17 @@ def pagina_citas(con, cfg, usuario, q):
         f"<tr><td>{e(base.fecha_humana(cfg, base.de_iso(f['inicio'])))}</td><td><a href='{bp}/bandeja/c/{f['contacto_id']}'>"
         f"{e(f['nombre'] or f['telefono'])}</a></td><td>{e(cfg.servicios.get(f['servicio_id'], {}).get('nombre', f['servicio_id']))}"
         f"</td><td>{ESTADOS_CITA[f['estado']]}</td><td>"
-        + ((boton(f["id"], "asistio", "Asistió") + boton(f["id"], "no_asistio", "No asistió")
-            + boton(f["id"], "cancelada", "Cancelar")) if f["estado"] == "agendada" else "")
+        + (((boton(f["id"], "asistio", "Asistió") + boton(f["id"], "no_asistio", "No asistió")
+             if ya_es_el_dia(cfg, f) else "") + boton(f["id"], "cancelada", "Cancelar")) if f["estado"] == "agendada" else "")
         + "".join(x(con, cfg, f) for x in EXTRAS_FILA_CITA) + "</td></tr>" for f in filas)
     error = (q.get("error") or [""])[0]
     return (f"<h1>Citas (ayer a 7 días)</h1>{'<p class=err>' + e(error) + '</p>' if error else ''}"
             f"<table><tr><th>Cuándo</th><th>Cliente</th><th>Servicio</th><th>Estado</th><th></th></tr>{rows}</table>")
+
+
+def ya_es_el_dia(cfg, cita):
+    """La asistencia solo se marca el día de la cita o después."""
+    return base.de_iso(cita["inicio"]).astimezone(cfg.tz).date() <= base.ahora().astimezone(cfg.tz).date()
 
 
 def marcar_cita(con, cfg, usuario, form):
@@ -442,6 +447,8 @@ def marcar_cita(con, cfg, usuario, form):
     cita = con.execute("SELECT * FROM cita WHERE id=?", (cita_id,)).fetchone()
     if not cita or cita["estado"] != "agendada" or estado not in ("asistio", "no_asistio", "cancelada"):
         return "/bandeja/citas?error=" + urllib.parse.quote("La cita ya no está agendada.")
+    if estado != "cancelada" and not ya_es_el_dia(cfg, cita):
+        return "/bandeja/citas?error=" + urllib.parse.quote("La asistencia se marca el día de la cita o después.")
     if estado == "cancelada":
         try:
             cancelar(con, cfg, cita_id)

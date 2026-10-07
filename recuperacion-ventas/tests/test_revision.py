@@ -170,6 +170,20 @@ class TickConFallas(Caso):
         self.assertIsNone(self.contacto("+528112340001")["reactivacion_enviada"])
 
 
+class AsistenciaFutura(Caso):
+    def test_no_se_marca_asistencia_antes_del_dia_de_la_cita(self):
+        self.escribir("quiero agendar una limpieza")
+        self.escribir("3")                                         # mañana 9:00
+        cita = self.con.execute("SELECT * FROM cita").fetchone()
+        self.assertNotIn(">Asistió</button>", agenda.pagina_citas(self.con, self.cfg, "ana", {}))
+        destino = agenda.marcar_cita(self.con, self.cfg, "ana", {"cita": [str(cita["id"])], "estado": ["asistio"]})
+        self.assertIn("error=", destino)
+        self.assertEqual(self.con.execute("SELECT estado FROM cita").fetchone()[0], "agendada")
+        self.t = local(2026, 10, 7, 9, 50)                         # el día de la cita
+        self.assertEqual(agenda.marcar_cita(self.con, self.cfg, "ana", {"cita": [str(cita["id"])], "estado": ["asistio"]}),
+                         "/bandeja/citas")
+
+
 class Varios(Caso):
     def test_texto_de_escalamiento_no_fija_minutos(self):
         self.assertNotRegex(motor.motivo_legible("escalamiento"), r"\d")
