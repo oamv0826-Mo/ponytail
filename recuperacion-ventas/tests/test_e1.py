@@ -1,4 +1,5 @@
 """Etapa 1: webhook, cola, IA con guardrails, handoff y bandeja con login."""
+import datetime as dt
 import http.client
 import json
 import os
@@ -243,7 +244,7 @@ class Bandeja(Caso):
     def test_sesion_expira_a_las_12_horas(self):
         cookie = self.entrar()
         self.assertEqual(self.pedir("GET", "/bandeja", cookie=cookie)[0], 200)
-        self.t = self.t.replace(hour=self.t.hour + 12, minute=1)
+        self.t = self.t + dt.timedelta(hours=12, minutes=1)
         self.assertEqual(self.pedir("GET", "/bandeja", cookie=cookie)[0], 303)
 
     def test_post_sin_origen_se_rechaza(self):
