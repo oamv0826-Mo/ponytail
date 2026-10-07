@@ -153,7 +153,7 @@ def guardar_entrante(con, cfg, item):
     if not c["primer_entrante"]:
         con.execute("UPDATE contacto SET primer_entrante=? WHERE id=?", (base.iso(ts), c["id"]))
         if not base.abierto(cfg, ts):
-            base.evento(con, c["id"], "fuera_horario")
+            base.evento(con, c["id"], "fuera_horario", creado=ts)
     con.execute("UPDATE contacto SET ultimo_entrante=MAX(COALESCE(ultimo_entrante, ''), ?), seg_activo=0 WHERE id=?",
                 (base.iso(ts), c["id"]))
     return contacto(con, c["id"]), texto

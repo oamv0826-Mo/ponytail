@@ -84,3 +84,17 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - El consentimiento solo viene del CSV de importación; reimportar con "no" lo revoca y con vacío no lo cambia.
 - Palabras de baja por defecto incluyen "detener promociones"/"stop promotions" (texto del botón de baja de Meta en plantillas de marketing).
 - Cada paso del tick corre aislado: la falla de uno se registra y los demás siguen; `tick` sale con código 1 si alguno falló (systemd lo marca).
+
+## Agregadas en la Etapa 4
+- La atribución se calcula y se guarda al registrar la venta (no al hacer el reporte): el origen no cambia si después llegan más mensajes, y el dueño puede ver por qué se asignó.
+- "Antes de la venta" = hasta el fin del día de la venta en hora de Monterrey: la venta se registra por fecha, no por hora.
+- El evento `fuera_horario` lleva la hora real del mensaje de Meta, no la de procesamiento: un reintento tardío no corre la ventana de 60 días.
+- Montos en centavos enteros; se aceptan "$1,500.50", "1500.5" y "800"; nunca cero ni negativo; fechas futuras se rechazan.
+- Venta duplicada = mismo contacto, fecha y monto (restricción UNIQUE): evita doble conteo al reimportar el mismo CSV.
+- Importar ventas solo cruza con contactos existentes; teléfonos desconocidos se reportan por línea, no se crean contactos nuevos.
+- Consulta = mensaje entrante sin otro entrante del mismo contacto en las 24 h previas; tiempo de respuesta = hasta el primer mensaje saliente (bot o humano).
+- Reseñas en el reporte: solicitudes enviadas (dato del sistema) y, opcional, `--resenas-google N` como dato manual: el sistema no lee el perfil de Google.
+- El reporte se guarda en `reportes/reporte-AAAA-MM.md` de la carpeta del cliente y se imprime; por defecto es el mes anterior.
+- La garantía se evalúa por fecha de venta dentro de los 60 días naturales desde `fecha_inicio` (día 1 incluido); antes de que termine el periodo se muestra "EN CURSO".
+- El anexo de contrato incluye exclusiones (no registrar ventas, suspensión por causa del negocio, no entregar la base con consentimiento): son condiciones contractuales, el sistema no las evalúa.
+- Página estática con precios visibles (los mismos que da el bot), horario completo y enlace a Google Maps por dirección; sin JS ni recursos externos.

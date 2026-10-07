@@ -1,5 +1,6 @@
 """Línea de comandos: python3 -m rv --cliente DIR <comando> ..."""
 import argparse
+import datetime as dt
 import getpass
 import json
 import os
@@ -81,6 +82,32 @@ def cmd_importar_clientes(cfg, args):
         print(f"  línea {linea}: {motivo}")
 
 
+def cmd_importar_ventas(cfg, args):
+    with base.db(cfg) as con:
+        r = ventas.importar_ventas(con, cfg, args.csv)
+    print(f"registradas={r['registradas']} duplicadas={r['duplicadas']} rechazadas={len(r['rechazadas'])}")
+    for linea, motivo in r["rechazadas"]:
+        print(f"  línea {linea}: {motivo}")
+
+
+def cmd_reporte(cfg, args):
+    mes = args.mes or (base.ahora().astimezone(cfg.tz).replace(day=1) - dt.timedelta(days=1)).strftime("%Y-%m")
+    with base.db(cfg) as con:
+        texto = ventas.reporte(con, cfg, mes, args.resenas_google)
+    carpeta = cfg.carpeta / "reportes"
+    carpeta.mkdir(exist_ok=True)
+    (carpeta / f"reporte-{mes}.md").write_text(texto, encoding="utf-8")
+    print(texto)
+
+
+def cmd_pagina(cfg, args):
+    salida = args.salida or str(cfg.carpeta / "pagina" / "index.html")
+    os.makedirs(os.path.dirname(salida) or ".", exist_ok=True)
+    with open(salida, "w", encoding="utf-8") as f:
+        f.write(ventas.pagina(cfg))
+    print(f"página escrita en {salida}")
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="rv", description="Sistema de Recuperación de Ventas")
     p.add_argument("--cliente", default=os.environ.get("RV_CLIENTE", "."), help="carpeta del cliente")
@@ -96,6 +123,13 @@ def main(argv=None):
     sub.add_parser("tick", help="envíos programados (correr cada 5 min)")
     i = sub.add_parser("importar-clientes", help="CSV: nombre,telefono,ultima_visita,consentimiento")
     i.add_argument("csv")
+    v = sub.add_parser("importar-ventas", help="CSV: telefono,fecha,monto")
+    v.add_argument("csv")
+    r = sub.add_parser("reporte", help="reporte mensual (por defecto, el mes anterior)")
+    r.add_argument("mes", nargs="?", help="AAAA-MM")
+    r.add_argument("--resenas-google", type=int, help="reseñas nuevas en Google en el mes (dato manual)")
+    pg = sub.add_parser("pagina", help="página estática que lleva a WhatsApp")
+    pg.add_argument("--salida")
     u = sub.add_parser("usuario", help="crea o cambia la contraseña de un usuario de la bandeja")
     u.add_argument("nombre")
     u.add_argument("--clave-stdin", action="store_true")
@@ -105,7 +139,9 @@ def main(argv=None):
     base.abrir_db(cfg).close()  # migraciones
     {"serve": lambda: web.servir(cfg), "simular": lambda: cmd_simular(cfg, args),
      "usuario": lambda: cmd_usuario(cfg, args), "tick": lambda: cmd_tick(cfg, args),
-     "importar-clientes": lambda: cmd_importar_clientes(cfg, args)}[args.cmd]()
+     "importar-clientes": lambda: cmd_importar_clientes(cfg, args),
+     "importar-ventas": lambda: cmd_importar_ventas(cfg, args), "reporte": lambda: cmd_reporte(cfg, args),
+     "pagina": lambda: cmd_pagina(cfg, args)}[args.cmd]()
 
 
 if __name__ == "__main__":

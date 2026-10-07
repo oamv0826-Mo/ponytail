@@ -310,9 +310,9 @@ def respaldar(con, destino):
     return salida
 
 
-def evento(con, contacto_id, tipo, detalle=""):
+def evento(con, contacto_id, tipo, detalle="", creado=None):
     con.execute("INSERT INTO evento (contacto_id, tipo, creado, detalle) VALUES (?,?,?,?)",
-                (contacto_id, tipo, iso(ahora()), detalle))
+                (contacto_id, tipo, iso(creado or ahora()), detalle))
 
 
 def get_estado(con, clave, defecto=None):

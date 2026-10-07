@@ -451,9 +451,12 @@ def servir(cfg):
 
 
 # ---------- registro de secciones de etapas posteriores ----------
-from . import agenda  # noqa: E402
+from . import agenda, ventas  # noqa: E402
 
 EXTRAS_CONVERSACION.append(agenda.html_agendar)
 ACCIONES_EXTRA["agendar"] = agenda.accion_agendar
 PAGINAS_EXTRA["/bandeja/citas"] = agenda.pagina_citas
 RUTAS_POST_EXTRA["/bandeja/citas/marcar"] = agenda.marcar_cita
+EXTRAS_CONVERSACION.append(ventas.html_ventas_conversacion)
+ACCIONES_EXTRA["venta"] = ventas.accion_venta
+agenda.EXTRAS_FILA_CITA.append(ventas.html_venta_en_cita)
