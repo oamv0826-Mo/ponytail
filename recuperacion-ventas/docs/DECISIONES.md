@@ -54,3 +54,4 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - Modo prueba usa secretos fijos de prueba (`secreto-de-prueba`, `verificar-prueba`) para que `simular` firme igual que Meta.
 - `simular` se niega a correr con `modo_prueba=false` salvo que apunte con `--url` a un servidor: no hay forma de mandar mensajes reales por accidente desde el simulador.
 - Las cabeceras de seguridad (CSP, X-Frame-Options DENY, no-store, nosniff) van en todas las respuestas: la bandeja muestra datos personales.
+- El nombre de perfil de WhatsApp (lo controla el cliente) se guarda sin caracteres de control y máximo 60, y va a la IA entre comillas JSON marcado como dato del cliente: evita inyección de instrucciones por el nombre (hallazgo de la revisión de seguridad).
