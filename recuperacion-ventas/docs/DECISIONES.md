@@ -70,3 +70,17 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - Agendar desde la bandeja permite cualquier hora futura (el equipo puede hacer excepciones), pero nunca encima de otra cita; avisa al cliente con texto libre o con la plantilla `cita_confirmada` si la ventana está cerrada.
 - Cancelar desde la vista Citas no avisa al cliente: lo hace el equipo, que ya está hablando con él.
 - Citas canceladas directamente en Google Calendar no se sincronizan de regreso: el equipo debe cancelar desde la bandeja (queda en el runbook). Sincronizar sería un webhook de Google más; no se pidió.
+
+## Agregadas en la Etapa 3
+- Recordatorio de 24 h fuera de ventana: se adelanta al último momento permitido menos 30 min de holgura (p. ej. sábado 19:30 para una cita del lunes 9:30): el tick de 5 min siempre lo alcanza.
+- Recordatorio de 2 h: solo si ese momento cae en ventana; si no, se marca `omitido` (el de 24 h ya cubrió).
+- Una cita creada después del momento de un recordatorio no recibe ese recordatorio: el cliente acaba de recibir la confirmación.
+- Seguimiento: nunca dos mensajes el mismo día aunque el sistema haya estado caído; los pasos vencidos se mandan uno por día.
+- Seguimiento: un día que cae en domingo/día cerrado se manda en la siguiente ventana permitida (no se salta el paso).
+- Reseñas: si "Asistió" se marcó hace más de 7 días, ya no se pide (`omitida`): una solicitud tardía se siente fuera de lugar.
+- Reactivación: hasta 10 envíos por tick (reparte el lote del día y no inunda la bandeja de respuestas al mismo tiempo); prioridad a quien vino más recientemente (más probable que regrese).
+- Reactivación: excluye a quien escribió en los últimos 30 días o tiene cita futura.
+- Calidad del número: se consulta una vez al día; sin dato (`UNKNOWN`) o `YELLOW` se usa el lote base; `RED` pausa la reactivación y avisa al dueño (cada día que siga en rojo). En modo prueba se simula con la clave `calidad_simulada` de la tabla `estado`.
+- El consentimiento solo viene del CSV de importación; reimportar con "no" lo revoca y con vacío no lo cambia.
+- Palabras de baja por defecto incluyen "detener promociones"/"stop promotions" (texto del botón de baja de Meta en plantillas de marketing).
+- Cada paso del tick corre aislado: la falla de uno se registra y los demás siguen; `tick` sale con código 1 si alguno falló (systemd lo marca).

@@ -47,7 +47,7 @@ DEFAULTS = {
                             "desmayo", "no puedo respirar", "inflamacion fuerte", "fiebre alta"],
         "handoff": ["hablar con una persona", "hablar con alguien", "persona real", "asesor", "humano",
                     "queja", "reclamo", "abogado", "demanda", "factura"],
-        "baja": ["baja", "no gracias", "ya no", "stop"],
+        "baja": ["baja", "no gracias", "ya no", "stop", "detener promociones", "stop promotions"],
     },
     "ia": {"modelo": "claude-haiku-4-5", "tope_mensual_usd": 30, "max_contexto": 20, "timeout_s": 20},
     "agenda": {"proveedor": "local", "calendar_id": "", "dias_adelante": 14, "anticipacion_min_horas": 2,
@@ -192,17 +192,18 @@ def en_ventana_envio(cfg, t):
     return a <= local.time() < b
 
 
-def ultimo_momento_envio_antes(cfg, t):
-    """t si está en ventana; si no, el último momento permitido anterior a t (o None en 30 días)."""
-    if en_ventana_envio(cfg, t):
-        return t
+def ultimo_momento_envio_antes(cfg, t, holgura=dt.timedelta(minutes=30)):
+    """t si cae en la ventana de envío (sin contar sus últimos 'holgura' minutos); si no, el último momento
+    permitido anterior, que es el cierre de la ventana menos 'holgura' (el tick corre cada 5 min y necesita
+    margen para alcanzarlo). None si no hay ninguno en 30 días."""
     local = t.astimezone(cfg.tz)
     a, b = (_hm(x) for x in cfg["envios"]["ventana"])
     for d in range(31):
         fecha = local.date() - dt.timedelta(days=d)
-        fin = dt.datetime.combine(fecha, b, cfg.tz) - dt.timedelta(minutes=1)
-        if fin < local and en_ventana_envio(cfg, fin):
-            return fin.astimezone(UTC)
+        fin = dt.datetime.combine(fecha, b, cfg.tz) - holgura
+        candidato = min(local, fin) if d == 0 else fin
+        if en_ventana_envio(cfg, candidato) and candidato.time() >= a:
+            return candidato.astimezone(UTC)
     return None
 
 

@@ -7,7 +7,7 @@ import sys
 import time
 import urllib.request
 
-from . import base, motor, wa, web
+from . import base, motor, tick, ventas, wa, web
 
 
 def payload_falso(telefono, texto=None, nombre="", tipo="text", msg_id=None):
@@ -64,6 +64,23 @@ def cmd_usuario(cfg, args):
     print(f"usuario '{args.nombre}' listo")
 
 
+def cmd_tick(cfg, args):
+    with base.db(cfg) as con:
+        resumen = tick.correr(con, cfg)
+    print(" ".join(f"{k}={v}" for k, v in resumen.items()))
+    if "error" in resumen.values():
+        sys.exit(1)
+
+
+def cmd_importar_clientes(cfg, args):
+    with base.db(cfg) as con:
+        r = ventas.importar_clientes(con, cfg, args.csv)
+    print(f"nuevos={r['nuevos']} actualizados={r['actualizados']} duplicados={r['duplicados']} "
+          f"equipo_excluidos={r['equipo']} rechazados={len(r['rechazados'])}")
+    for linea, motivo in r["rechazados"]:
+        print(f"  línea {linea}: {motivo}")
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="rv", description="Sistema de Recuperación de Ventas")
     p.add_argument("--cliente", default=os.environ.get("RV_CLIENTE", "."), help="carpeta del cliente")
@@ -76,6 +93,9 @@ def main(argv=None):
     s.add_argument("--tipo", default="text", choices=["text", "audio", "image"])
     s.add_argument("--interactivo", action="store_true")
     s.add_argument("--url", help="enviar al servidor en marcha (p. ej. http://127.0.0.1:8080)")
+    sub.add_parser("tick", help="envíos programados (correr cada 5 min)")
+    i = sub.add_parser("importar-clientes", help="CSV: nombre,telefono,ultima_visita,consentimiento")
+    i.add_argument("csv")
     u = sub.add_parser("usuario", help="crea o cambia la contraseña de un usuario de la bandeja")
     u.add_argument("nombre")
     u.add_argument("--clave-stdin", action="store_true")
@@ -84,7 +104,8 @@ def main(argv=None):
     cfg = base.cargar_config(args.cliente)
     base.abrir_db(cfg).close()  # migraciones
     {"serve": lambda: web.servir(cfg), "simular": lambda: cmd_simular(cfg, args),
-     "usuario": lambda: cmd_usuario(cfg, args)}[args.cmd]()
+     "usuario": lambda: cmd_usuario(cfg, args), "tick": lambda: cmd_tick(cfg, args),
+     "importar-clientes": lambda: cmd_importar_clientes(cfg, args)}[args.cmd]()
 
 
 if __name__ == "__main__":

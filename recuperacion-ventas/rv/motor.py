@@ -12,6 +12,7 @@ MOTIVOS = {
     "sin_horarios": "no hay horarios disponibles en línea",
     "escalamiento": "lleva más de 15 minutos sin respuesta",
     "agenda_error": "falló el calendario",
+    "calidad_roja": "la calidad del número de WhatsApp está en rojo; la reactivación quedó en pausa",
     "cambio_cita_complejo": "quiere cancelar o cambiar una cita y no es un caso simple",
 }
 RANGO_ESTADO = {"pendiente": 0, "enviado": 1, "prueba": 1, "sent": 2, "delivered": 3, "read": 4, "failed": 5}
