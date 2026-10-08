@@ -167,11 +167,27 @@ def html_lista(con, cfg, usuario, filtro):
     return f"<table><tr><th>Contacto</th><th>Atiende</th><th>Tomada por</th><th>Último mensaje</th></tr>{rows}</table>"
 
 
+MEDIA_EN_LINEA = {"image/jpeg", "image/png", "image/webp", "audio/ogg", "audio/mpeg", "audio/aac", "audio/mp4",
+                  "audio/amr", "video/mp4", "video/3gpp", "application/pdf"}
+
+
+def html_media(cfg, m):
+    if not m["media_id"]:
+        return ""
+    url = f"{e(cfg.base_path)}/bandeja/media/{m['id']}"
+    mime = (m["media_mime"] or "").split(";")[0]
+    if mime.startswith("audio/") and mime in MEDIA_EN_LINEA:
+        return f"<br><audio controls preload='none' src='{url}'></audio>"
+    if mime.startswith("image/") and mime in MEDIA_EN_LINEA:
+        return f"<br><a href='{url}'><img src='{url}' alt='foto del cliente' style='max-width:240px'></a>"
+    return f"<br><a href='{url}'>Abrir archivo</a>"
+
+
 def html_mensajes(con, cfg, cid):
     filas = con.execute("SELECT * FROM (SELECT * FROM mensaje WHERE contacto_id=? ORDER BY id DESC LIMIT 200) "
                         "ORDER BY id", (cid,)).fetchall()
     return "".join(
-        f"<div class='msg {m['direccion']}'>{e(m['texto'])}<div class='meta'>{e(m['autor'])} · "
+        f"<div class='msg {m['direccion']}'>{e(m['texto'])}{html_media(cfg, m)}<div class='meta'>{e(m['autor'])} · "
         f"{hora_local(cfg, m['creado'])} · {e(m['estado'])}"
         f"{' · <span class=err>' + e(m['error']) + '</span>' if m['error'] else ''}</div></div>" for m in filas)
 
@@ -346,6 +362,9 @@ def crear_servidor(cfg, host="127.0.0.1", puerto=None):
                     aviso = f"<p class='aviso err'>{e(error)}</p>" if error else ""
                     return self.enviar(200, pagina(cfg, c["nombre"] or c["telefono"],
                                                    aviso + html_conversacion(con, cfg, c, usuario), usuario))
+                m = re.fullmatch(r"/bandeja/media/(\d+)", u.path)
+                if m:
+                    return self.media(con, int(m.group(1)))
                 if u.path in PAGINAS_EXTRA:
                     return self.enviar(200, pagina(cfg, "Bandeja", PAGINAS_EXTRA[u.path](con, cfg, usuario, q), usuario))
             self.enviar(404, "no encontrado", "text/plain")
@@ -392,6 +411,21 @@ def crear_servidor(cfg, host="127.0.0.1", puerto=None):
                     destino = RUTAS_POST_EXTRA[u.path](con, cfg, usuario, form)
                     return self.redirigir(destino or "/bandeja")
             self.enviar(404, "no encontrado", "text/plain")
+
+        def media(self, con, mensaje_id):
+            fila = con.execute("SELECT media_id FROM mensaje WHERE id=?", (mensaje_id,)).fetchone()
+            if not fila or not fila["media_id"]:
+                return self.enviar(404, "no hay archivo", "text/plain")
+            if cfg["modo_prueba"]:
+                return self.enviar(404, "en modo prueba no hay archivos reales", "text/plain")
+            try:
+                datos, mime = wa.descargar_media(cfg, fila["media_id"])
+            except Exception as ex:  # vencido en Meta (≈30 días), red, demasiado grande
+                base.log("media:", ex)
+                return self.enviar(502, "no se pudo obtener el archivo de WhatsApp", "text/plain")
+            mime = mime.split(";")[0].strip()
+            extra = [] if mime in MEDIA_EN_LINEA else [("Content-Disposition", "attachment")]  # p. ej. SVG/HTML: nunca en línea
+            return self.enviar(200, datos, mime if mime in MEDIA_EN_LINEA else "application/octet-stream", extra)
 
         def login(self, con, form):
             nombre = (form.get("usuario") or [""])[0].strip()

@@ -5,6 +5,7 @@ import json
 import os
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 
@@ -58,6 +59,38 @@ def texto_de(msg):
         i = msg.get("interactive", {})
         return (i.get("button_reply") or i.get("list_reply") or {}).get("title", "")
     return None
+
+
+TIPOS_MEDIA = {"image": "foto", "audio": "nota de voz", "video": "video", "document": "documento", "sticker": "sticker"}
+
+
+def no_texto(msg):
+    """(texto para mostrar, media_id, mime) de un mensaje que no es texto. Conserva el texto de la foto/documento."""
+    t = msg.get("type", "desconocido")
+    datos = msg.get(t) if isinstance(msg.get(t), dict) else {}
+    if t in TIPOS_MEDIA:
+        extra = datos.get("caption") or datos.get("filename") or ""
+        return f"[{TIPOS_MEDIA[t]}] {extra}".strip(), datos.get("id"), datos.get("mime_type")
+    if t == "location":
+        partes = [datos.get("name"), datos.get("address"), f"{datos.get('latitude')},{datos.get('longitude')}"]
+        return "[ubicación] " + " · ".join(str(x) for x in partes if x and x != "None,None"), None, None
+    if t == "reaction":
+        return f"[reacción {datos.get('emoji') or 'quitada'}]", None, None
+    return f"[{t}]", None, None
+
+
+MAX_MEDIA = 25_000_000
+
+
+def descargar_media(cfg, media_id):
+    """Bytes y tipo de un archivo del cliente (la URL de Meta dura minutos: se pide cada vez)."""
+    info = _graph(cfg, "GET", urllib.parse.quote(media_id, safe=""))
+    req = urllib.request.Request(info["url"], headers={"Authorization": f"Bearer {os.environ.get('WA_TOKEN', '')}"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        datos = r.read(MAX_MEDIA + 1)
+    if len(datos) > MAX_MEDIA:
+        raise RuntimeError("archivo demasiado grande")
+    return datos, info.get("mime_type") or "application/octet-stream"
 
 
 def _graph(cfg, metodo, ruta, cuerpo=None, timeout=15):

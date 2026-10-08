@@ -141,3 +141,8 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 ## Encontrado en la simulación de punta a punta
 - Seguimiento: "responde" se interpreta como responder a un mensaje de seguimiento ya enviado. Antes, cualquier mensaje después de pedir precio (p. ej. "ok gracias, lo pienso") cancelaba la secuencia antes del primer envío, justo en el caso central del documento ("piden precio, dicen 'lo pienso' y desaparecen"). Ahora esos mensajes solo recorren el conteo de días al último mensaje.
 - La IA simulada (solo modo prueba) responde con cortesía a "gracias / lo pienso" y pasa a humano las preguntas de salud en vez de pasar a humano, como lo haría la IA real; así la demo refleja el flujo real.
+
+## Ciclo de caza de errores (detalle en docs/BUGHUNT.md)
+- Baja por frase: además de las palabras exactas, frases inequívocas dentro del mensaje ("darme de baja", "no me manden", "no me envíen"…) registran el opt-out. Un falso positivo solo apaga los envíos proactivos; el cliente sigue recibiendo respuestas si escribe.
+- Reacciones (👍) no se contestan ni pasan a humano.
+- Archivos del cliente: se guarda el id de Meta (esquema v3) y la bandeja los pide a Meta en el momento (la URL de descarga dura minutos; Meta los conserva ~30 días). Máximo 25 MB. Solo se muestran en línea imagen/audio/video/PDF comunes; lo demás se descarga.

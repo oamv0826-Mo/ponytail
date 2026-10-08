@@ -148,11 +148,11 @@ def guardar_entrante(con, cfg, item, reintento=False):
         con.execute("UPDATE contacto SET wa_id=?, nombre=CASE WHEN nombre='' THEN ? ELSE nombre END WHERE id=?",
                     (m["from"], nombre, c["id"]))
     c = con.execute("SELECT * FROM contacto WHERE telefono=?", (tel,)).fetchone()
+    mostrado, media_id, media_mime = (texto, None, None) if texto is not None else wa.no_texto(m)
     cur = con.execute("INSERT OR IGNORE INTO mensaje (contacto_id, telefono, direccion, tipo, texto, autor, wa_id, "
-                      "estado, creado) VALUES (?,?,?,?,?,?,?,?,?)",
-                      (c["id"], tel, "in", "texto" if texto is not None else "otro",
-                       texto if texto is not None else f"[{m.get('type', 'desconocido')}]", "cliente", m["id"],
-                       "recibido", base.iso(ts)))
+                      "estado, creado, media_id, media_mime) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                      (c["id"], tel, "in", "texto" if texto is not None else "otro", mostrado, "cliente", m["id"],
+                       "recibido", base.iso(ts), media_id, media_mime))
     if cur.rowcount == 0:
         if not reintento:
             return None  # duplicado
@@ -179,6 +179,8 @@ def procesar_mensaje(con, cfg, item, reintento=False):
     if r is None:
         return
     c, texto = r
+    if item["msg"].get("type") == "reaction":
+        return   # una reacción (👍) no es una consulta: se guarda y no se contesta ni se avisa al equipo
     try:
         atender(con, cfg, c, texto)
     except Exception as e:  # red de seguridad: ningún error deja al cliente sin respuesta ni al equipo sin aviso
@@ -194,7 +196,7 @@ def procesar_mensaje(con, cfg, item, reintento=False):
 def atender(con, cfg, c, texto):
     tn = base.normalizar_texto(texto or "")
 
-    if texto is not None and tn in cfg.palabras["baja"]:
+    if (texto is not None and tn in cfg.palabras["baja"]) or base.contiene_frase(tn, cfg.palabras["baja_frases"]):
         registrar_baja(con, cfg, c)
         responder(con, cfg, c, cfg.msg["baja"])
         return

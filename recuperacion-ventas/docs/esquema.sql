@@ -133,3 +133,8 @@ CREATE TABLE estado (                          -- pares clave/valor de la instan
 ALTER TABLE entrada ADD COLUMN terminado TEXT;
 UPDATE entrada SET terminado = procesado WHERE procesado IS NOT NULL;
 CREATE INDEX entrada_sin_terminar ON entrada(terminado, id);
+
+-- version: 3
+-- Archivos del cliente (foto, nota de voz, documento): id de Meta para descargarlos desde la bandeja.
+ALTER TABLE mensaje ADD COLUMN media_id TEXT;
+ALTER TABLE mensaje ADD COLUMN media_mime TEXT;

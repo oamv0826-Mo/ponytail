@@ -50,6 +50,10 @@ DEFAULTS = {
         "handoff": ["hablar con una persona", "hablar con alguien", "persona real", "asesor", "humano",
                     "queja", "reclamo", "abogado", "demanda", "factura"],
         "baja": ["baja", "no gracias", "ya no", "stop", "detener promociones", "stop promotions"],
+        # frases inequívocas que piden la baja dentro de un mensaje más largo
+        "baja_frases": ["darme de baja", "dame de baja", "denme de baja", "dar de baja", "no me manden", "no me envien",
+                        "no me escriban", "dejen de enviar", "deja de enviar", "dejen de mandar", "deja de mandar",
+                        "no quiero recibir", "no quiero mas mensajes"],
     },
     "ia": {"modelo": "claude-haiku-4-5", "tope_mensual_usd": 30, "max_contexto": 20, "timeout_s": 20},
     "agenda": {"proveedor": "local", "calendar_id": "", "dias_adelante": 14, "anticipacion_min_horas": 2,
