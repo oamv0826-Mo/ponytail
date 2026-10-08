@@ -156,6 +156,8 @@ def verificado(autenticacion, dominio_from, servidor=None):
     agrega el suyo arriba. Se lee como RFC 8601 (sin comentarios, cláusula 'dmarc=pass ... header.from=<dominio>'),
     no buscando texto: un comentario puede traer datos del remitente. Ante cualquier duda: no verificado."""
     a = autenticacion or ""
+    if '"' in a or "\\" in a:   # cadenas entre comillas o escapes: no se intenta interpretar, no verificado
+        return False
     for _ in range(3):   # comentarios (posiblemente anidados)
         a = re.sub(r"\([^()]*\)", " ", a)
     if "(" in a or ")" in a:
@@ -165,11 +167,14 @@ def verificado(autenticacion, dominio_from, servidor=None):
         if not servidor or not partes or not partes[0] or partes[0][0].lower() != servidor.lower():
             return False
         partes = partes[1:]
-    for tokens in partes:
-        if tokens and tokens[0].lower() == "dmarc=pass":
-            dominio = next((t.split("=", 1)[1].lower() for t in tokens[1:] if t.lower().startswith("header.from=")), "")
-            return bool(dominio_from) and dominio == dominio_from.lower()
-    return False
+    dmarc = [t for t in partes if t and t[0].lower().startswith("dmarc=")]
+    if len(dmarc) != 1 or dmarc[0][0].lower() != "dmarc=pass":   # exactamente un resultado DMARC, y aprobado
+        return False
+    props = dmarc[0][1:]
+    if not all(re.fullmatch(r"[a-z][a-z0-9.\-]*=[a-z0-9.@_+\-]+", t, re.I) for t in props):
+        return False
+    dominios = [t.split("=", 1)[1].lower() for t in props if t.lower().startswith("header.from=")]
+    return bool(dominio_from) and dominios == [dominio_from.lower()]
 
 
 def _item(cfg, de, nombre, asunto, msg_id, texto, fecha, graph_id=None, cabeceras=None, autenticacion=None,

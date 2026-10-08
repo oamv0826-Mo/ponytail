@@ -64,6 +64,7 @@ def locales(con, cfg):
                                           f"{', '.join(em['avisos_a']) or 'nadie'}")
     else:
         aviso("correo sin configurar: los avisos solo llegan por WhatsApp y el reporte no se manda por correo")
+    aviso("reseñas nuevas de Google: dato manual en el reporte (--resenas-google); ver arranque-cuentas.md §12")
     (ok if cfg["resenas"].get("link") else aviso)(f"link de reseñas: {cfg['resenas'].get('link') or 'vacío (no se piden reseñas)'}")
     rotas = con.execute("SELECT COUNT(*) FROM entrada WHERE error IS NOT NULL").fetchone()[0]
     (aviso if rotas else ok)(f"entradas del webhook con error: {rotas}")

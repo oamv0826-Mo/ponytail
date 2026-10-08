@@ -2,7 +2,8 @@
 
 Sistema de recuperación de ventas.
 
-WhatsApp con IA, citas, seguimiento, reactivación, reseñas y reporte mensual para negocios de servicio.
+WhatsApp (y correo) con IA, citas en Google Calendar o Microsoft 365, seguimiento, reactivación, reseñas, ventas
+registradas solas desde Stripe/Mercado Pago y reporte mensual para negocios de servicio.
 Python 3.11+ sin dependencias. Diseño: [docs/DISEÑO.md](docs/DISEÑO.md) · Decisiones: [docs/DECISIONES.md](docs/DECISIONES.md).
 
 ## Demo sin cuentas (modo prueba)
@@ -34,11 +35,11 @@ origen se rechazan.
 |---|---|
 | `serve` | webhook de Meta + bandeja web (servicio `rv@<id>`) |
 | `tick` | envíos programados (timer cada 5 min) |
-| `simular` | mensaje falso de WhatsApp (solo modo prueba) |
+| `simular` | mensaje falso de WhatsApp, o de correo con `--de cliente@correo.mx --asunto ...` (solo modo prueba) |
 | `usuario <nombre>` | crea o cambia la contraseña de la bandeja |
 | `importar-clientes clientes.csv` | base para reactivación (`nombre,telefono,ultima_visita,consentimiento`) |
 | `importar-ventas ventas.csv` | ventas (`telefono,fecha,monto`) |
-| `reporte [AAAA-MM] [--resenas-google N]` | reporte mensual con garantía |
+| `reporte [AAAA-MM] [--resenas-google N] [--enviar]` | reporte mensual con garantía; `--enviar` lo manda por correo |
 | `pagina [--salida archivo]` | página estática con botón a WhatsApp |
 | `verificar [--remoto]` | chequeos de instalación y salud |
 | `respaldo` | copia comprimida de la base |

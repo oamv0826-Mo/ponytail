@@ -346,3 +346,19 @@ Verificar firma → encolar en `entrada` → 200; el trabajador procesa como cua
 | Firma de Stripe (`t`, `v1`, cuerpo crudo, tolerancia) | [webhooks/signature](https://docs.stripe.com/webhooks/signature) |
 | Firma de Mercado Pago (plantilla `id;request-id;ts`) | [notificaciones webhooks](https://www.mercadopago.com/developers/es/docs/your-integrations/notifications/webhooks) |
 | Clip: sin webhooks de links documentados | [foro de Clip](https://developer.clip.mx/discuss/6954a96a2055efb9cdac5fae) |
+
+### 7.6 Reseñas de Google (fase 6: se queda manual)
+
+La API de Business Profile (reseñas en `accounts.locations.reviews`, v4, alcance `business.manage`) exige una
+solicitud de acceso que Google revisa a mano (~14 días, por proyecto de Google Cloud) y OAuth del propietario o
+administrador del perfil (un token que el dueño autoriza y que hay que renovar). Ningún cliente la tiene, así que el
+reporte sigue con `--resenas-google N` y la solicitud quedó documentada en
+[arranque-cuentas.md §12](arranque-cuentas.md). Alternativa sin aprobación: Places API (New) da el total de reseñas
+(`userRatingCount`) y la diferencia entre meses serían las nuevas, pero requiere una cuenta de facturación de Google
+Maps (costo por consulta); no se construyó sin la decisión del dueño.
+
+| Qué | Documentación |
+|---|---|
+| Requisitos y formulario de acceso | [prereqs](https://developers.google.com/my-business/content/prereqs) · [FAQ](https://developers.google.com/my-business/content/faq) |
+| Reseñas v4 y alcance `business.manage` | [accounts.locations.reviews](https://developers.google.com/my-business/reference/rest/v4/accounts.locations.reviews) |
+| Places API (New): campos y facturación por campo | [migración / field masks](https://developers.google.cn/maps/documentation/places/android-sdk/migrate-overview?hl=en) |

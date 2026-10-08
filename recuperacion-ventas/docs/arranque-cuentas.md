@@ -328,6 +328,23 @@ cárgalas con `importar-ventas` (columnas `telefono,fecha,monto`).
 
 ---
 
+## 12. Reseñas de Google en el reporte (manual por ahora)
+
+El reporte pide el número de reseñas nuevas del mes con `reporte AAAA-MM --resenas-google N`: lo ves en el Perfil
+de Empresa del negocio (Google Maps → Reseñas, ordenadas por "Más recientes"). Leerlo solo requiere la API de
+Business Profile, que Google aprueba a mano:
+
+1. Proyecto en <https://console.cloud.google.com> con el correo que es propietario o administrador del perfil.
+2. Formulario de contacto de la API de Business Profile → **"Application for Basic API Access"**. Google responde en
+   unos 14 días; mientras la cuota de "solicitudes por minuto" diga 0, no está aprobado.
+3. Con la aprobación: habilitar "Google My Business API" (v4, la de reseñas) y crear credenciales OAuth; el dueño
+   inicia sesión una vez y autoriza `business.manage`.
+
+Cuando esté aprobado, Agorá puede leer `accounts.locations.reviews.list` para el reporte (no está construido: hoy
+nadie tiene la aprobación y armarlo sin probarlo contra Google sería adivinar).
+
+---
+
 ## Cómo queda `secretos.env` al terminar los pasos 1 a 6
 
 ```
@@ -336,4 +353,19 @@ WA_APP_SECRET=1a2b3c...
 WA_VERIFY_TOKEN=lo-que-generaste
 ANTHROPIC_API_KEY=sk-ant-...
 GOOGLE_SA_FILE=/Users/oliver/rv-prueba/google-sa.json
+```
+
+Y si agregas lo opcional (pasos 9 a 11), solo las líneas de lo que uses:
+
+```
+# Correo por Gmail/Zoho/hosting (paso 9)
+SMTP_CLAVE=abcdefghijklmnop
+# Correo o calendario de Microsoft 365 (pasos 9 y 10)
+MS_TENANT_ID=...
+MS_CLIENT_ID=...
+MS_CLIENT_SECRET=...
+# Pagos (paso 11)
+STRIPE_WEBHOOK_SECRET=whsec_...
+MP_WEBHOOK_SECRET=...
+MP_ACCESS_TOKEN=APP_USR-...
 ```

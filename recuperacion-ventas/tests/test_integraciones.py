@@ -190,7 +190,11 @@ class CanalCorreo(ConCorreo):
                       "mx.google.com.evil.mx; dmarc=pass header.from=gmail.com",
                       "mx.google.com; dmarc=pass header.from=evil.mx",
                       "mx.google.com; dmarc=fail header.from=gmail.com; x=y dmarc=pass header.from=gmail.com",
-                      "mx.google.com; spf=pass (a) b) dmarc=pass header.from=gmail.com"):
+                      "mx.google.com; spf=pass (a) b) dmarc=pass header.from=gmail.com",
+                      'mx.google.com; spf=pass smtp.mailfrom="x;dmarc=pass header.from=gmail.com"@evil.mx',
+                      "mx.google.com; spf=pass (a\\) dmarc=pass header.from=gmail.com",
+                      "mx.google.com; dmarc=pass header.from=gmail.com; dmarc=fail header.from=gmail.com",
+                      "mx.google.com; dmarc=pass header.from=gmail.com header.from=evil.mx"):
             self.assertFalse(correo.verificado(valor, "gmail.com", "mx.google.com"), valor)
         self.assertTrue(correo.verificado("mx.google.com; dmarc=pass (p=NONE) header.from=Gmail.com", "gmail.com",
                                           "mx.google.com"))
