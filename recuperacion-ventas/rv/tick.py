@@ -48,13 +48,15 @@ def escalamientos(con, cfg, t):
     limite = dt.timedelta(minutes=int(cfg["escalamiento_min"]))
     n = 0
     for c in con.execute("SELECT * FROM contacto WHERE estado='humano'").fetchall():
-        ult_in = con.execute("SELECT MAX(creado) FROM mensaje WHERE contacto_id=? AND direccion='in'",
-                             (c["id"],)).fetchone()[0]
+        ult_in = con.execute("SELECT MAX(creado) FROM mensaje WHERE contacto_id=? AND direccion='in' AND "
+                             + base.NO_REACCION, (c["id"],)).fetchone()[0]
         ult_humano = con.execute("SELECT MAX(creado) FROM mensaje WHERE contacto_id=? AND autor LIKE 'humano:%'",
                                  (c["id"],)).fetchone()[0]
         if not ult_in or (ult_humano and ult_humano >= ult_in) or (c["escalado"] and c["escalado"] >= ult_in):
             continue
-        if t - max(base.de_iso(ult_in), apertura) >= limite:
+        # se cuenta desde lo último entre: su mensaje, la apertura y el paso a humano (uno manual es reciente)
+        desde = max(base.de_iso(ult_in), apertura, base.de_iso(c["handoff_desde"]) or apertura)
+        if t - desde >= limite:
             motor.avisar_equipo(con, cfg, c, "escalamiento")
             con.execute("UPDATE contacto SET escalado=? WHERE id=?", (base.iso(t), c["id"]))
             n += 1

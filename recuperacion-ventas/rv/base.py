@@ -331,6 +331,10 @@ def evento(con, contacto_id, tipo, detalle="", creado=None):
                 (contacto_id, tipo, iso(creado or ahora()), detalle))
 
 
+# Las reacciones (👍) se guardan como mensaje entrante pero no son consultas ni piden respuesta.
+NO_REACCION = "texto NOT LIKE '[reacción%'"
+
+
 def dio_baja(con, telefono):
     return con.execute("SELECT 1 FROM optout WHERE telefono=?", (telefono,)).fetchone() is not None
 

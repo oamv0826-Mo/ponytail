@@ -190,7 +190,8 @@ def datos_reporte(con, cfg, mes):
     # 1. consultas: mensaje entrante sin otro entrante del mismo contacto en las 24 h previas
     consultas = con.execute(
         "SELECT contacto_id, creado FROM (SELECT contacto_id, creado, LAG(creado) OVER (PARTITION BY contacto_id "
-        "ORDER BY creado) AS previo FROM mensaje WHERE direccion='in') WHERE creado>=? AND creado<? AND "
+        "ORDER BY creado) AS previo FROM mensaje WHERE direccion='in' AND " + base.NO_REACCION + ") "
+        "WHERE creado>=? AND creado<? AND "
         "(previo IS NULL OR julianday(creado)-julianday(previo)>1)", (A, B)).fetchall()
     # 2. tiempo de respuesta: primer mensaje saliente al cliente después del inicio de cada consulta
     tiempos, sin_respuesta = [], 0

@@ -1,6 +1,6 @@
 # Ciclo autónomo de caza de errores
 
-Estado: rondas = 2 · rondas seguidas sin hallazgos = 0 · se detiene con 2 limpias seguidas o al llegar a 8.
+Estado: rondas = 3 · rondas seguidas sin hallazgos = 0 · se detiene con 2 limpias seguidas o al llegar a 8.
 
 Orden de áreas: 1 motor/guardrails IA · 2 agenda/Google · 3 tick/ventanas · 4 ventas/atribución/reporte ·
 5 bandeja/seguridad · 6 CSV/teléfonos · 7 migraciones/respaldo/caídas · 8 kit (auditoria, demo, prueba) ·
@@ -25,3 +25,12 @@ Observación sin cambio: las palabras de urgencia son por frase exacta ("sangran
 | 2 | Confirmar una cancelación con "sí, cancélala por favor" o "si porfavor" no cancelaba (solo frases exactas) y volvía a preguntar. | `agenda.es_si`: empieza con sí/claro/ok/confirmo… y no trae dudas ("sí, pero mejor cámbiala" no cancela). | `test_confirmaciones_de_cancelacion` |
 
 Revisado sin hallazgos: cálculo de horarios con margen y anticipación, resta de intervalos de Google al reprogramar, candado de reserva, cancelación con falla de Google.
+
+## Ronda 3 · tick y ventanas de envío
+| # | Hallazgo (reproducido) | Corrección | Prueba |
+|---|---|---|---|
+| 1 | Si el cliente reaccionaba 👍 a la respuesta del equipo, el escalamiento lo tomaba como mensaje sin responder y avisaba a todos "sigue sin respuesta". | Las reacciones no cuentan como mensaje pendiente (`base.NO_REACCION`). | `test_reaccion_a_la_respuesta_del_equipo_no_escala` |
+| 2 | "Pasar a humano" a mano en una conversación de ayer disparaba el aviso de escalamiento en el siguiente tick (contaba desde el mensaje viejo). | El escalamiento cuenta desde lo último entre: mensaje del cliente, apertura y paso a humano. | `test_pasar_a_humano_a_mano_cuenta_desde_ese_momento` |
+| 3 | Una reacción días después contaba como "consulta recibida" en el reporte (inflaba el número 1 y el de sin respuesta). | Las reacciones se excluyen del cálculo de consultas. | `test_reaccion_no_cuenta_como_consulta_en_el_reporte` |
+
+Revisado sin hallazgos: recordatorios 24 h/2 h y su adelanto, reseñas cada 90 días, seguimiento sin dos envíos el mismo día, lotes de reactivación y calidad del número, reintentos ante fallas de Meta.

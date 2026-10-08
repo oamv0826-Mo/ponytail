@@ -151,3 +151,5 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - El servidor rechaza con 413 un `Content-Length` negativo: antes `read(-1)` leía sin límite hasta que el cliente cerraba la conexión. Prueba: `CuerpoConLargoNegativo`.
 - Elección de horario flexible pero conservadora: un solo número (opción u hora ofrecida) u ordinal en un mensaje de hasta 8 palabras; con negación o dos números no se elige y el mensaje pasa a la IA.
 - Confirmar cancelación: primera palabra afirmativa y sin "pero/mejor/cambia/no" después; ante la duda no se cancela.
+- Reacciones: no cuentan como consulta, ni como mensaje pendiente para escalar. Sí abren la ventana de 24 h y sí cuentan como respuesta a un seguimiento (son una señal de interés).
+- Escalamiento: 15 min de horario abierto desde lo último entre el mensaje del cliente y el paso a humano.

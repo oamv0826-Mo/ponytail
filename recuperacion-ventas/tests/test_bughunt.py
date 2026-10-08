@@ -98,3 +98,43 @@ class Ronda2Agenda(Caso):
             self.assertTrue(agenda.es_si(base.normalizar_texto(si)), si)
         for no in ("sí, pero mejor cámbiala", "si no hay de otra", "no", "mmm", ""):
             self.assertFalse(agenda.es_si(base.normalizar_texto(no)), no)
+
+
+class Ronda3Tick(Caso):
+    def avisos_escalamiento(self):
+        return self.con.execute("SELECT COUNT(*) FROM mensaje WHERE plantilla='aviso_equipo' "
+                                "AND texto LIKE '%sigue sin respuesta%'").fetchone()[0]
+
+    def test_reaccion_a_la_respuesta_del_equipo_no_escala(self):
+        from ayuda import local
+        from rv import tick
+        self.escribir("quiero hablar con una persona", de="+528100000299")
+        self.t = local(2026, 10, 6, 10, 5)
+        motor.responder(self.con, self.cfg, self.contacto("+528100000299"), "Hola, soy Ana", autor="humano:ana")
+        self.t = local(2026, 10, 6, 10, 6)
+        motor.procesar_item(self.con, self.cfg, mensaje_media(self.t, "reaction", {"message_id": "x", "emoji": "👍"}, "wamid.R"))
+        self.t = local(2026, 10, 6, 10, 40)
+        tick.escalamientos(self.con, self.cfg, self.t)
+        self.assertEqual(self.avisos_escalamiento(), 0)
+
+    def test_pasar_a_humano_a_mano_cuenta_desde_ese_momento(self):
+        from ayuda import local
+        from rv import tick
+        self.t = local(2026, 10, 5, 12, 0)
+        self.escribir("¿cuánto cuesta la limpieza?")
+        self.t = local(2026, 10, 6, 11, 0)
+        web.accion_conversacion(self.con, self.cfg, self.contacto(), "ana", "pasar", {})
+        self.t = local(2026, 10, 6, 11, 5)
+        tick.escalamientos(self.con, self.cfg, self.t)
+        self.assertEqual(self.avisos_escalamiento(), 0)
+        self.t = local(2026, 10, 6, 11, 15)
+        tick.escalamientos(self.con, self.cfg, self.t)
+        self.assertEqual(self.avisos_escalamiento(), 2)   # 15 min después sigue sin respuesta: dueño + equipo
+
+    def test_reaccion_no_cuenta_como_consulta_en_el_reporte(self):
+        from ayuda import local
+        from rv import ventas
+        self.escribir("hola", de="+528100000299")
+        self.t = local(2026, 10, 9, 10, 0)
+        motor.procesar_item(self.con, self.cfg, mensaje_media(self.t, "reaction", {"message_id": "x", "emoji": "❤️"}, "wamid.R2"))
+        self.assertEqual(ventas.datos_reporte(self.con, self.cfg, "2026-10")["consultas"], 1)
