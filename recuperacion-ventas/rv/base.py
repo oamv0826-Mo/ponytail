@@ -66,6 +66,9 @@ DEFAULTS = {
     "resenas": {"link": "", "horas_despues": 2, "cada_dias": 90},
     "plantillas_idioma": "es_MX",
     "whatsapp": {"phone_number_id": "", "waba_id": "", "graph_version": "v23.0"},
+    # correo: "" (sin correo) | "smtp" | "microsoft"; avisos_a recibe los mismos avisos que el WhatsApp del equipo
+    "email": {"proveedor": "", "remitente": "", "avisos_a": [], "reporte_a": [],
+              "smtp": {"host": "", "puerto": 587, "seguridad": "starttls"}},
     "mensajes": {},
 }
 
@@ -124,6 +127,13 @@ class Config(dict):
             if not s.get("id") or not s.get("nombre") or not isinstance(s.get("duracion_min"), int) \
                     or s["duracion_min"] <= 0 or isinstance(precio, bool) or not isinstance(precio, (int, float)) or precio < 0:
                 errores.append(f"servicio incompleto (id, nombre, precio_mxn numérico ≥ 0, duracion_min entero > 0): {s}")
+        em = self["email"]
+        if em["proveedor"] not in ("", "smtp", "microsoft"):
+            errores.append(f"email.proveedor inválido: {em['proveedor']!r} (vacío, smtp o microsoft)")
+        elif em["proveedor"] and "@" not in em["remitente"]:
+            errores.append("email.remitente debe ser un correo")
+        elif em["proveedor"] == "smtp" and (not em["smtp"]["host"] or em["smtp"]["seguridad"] not in ("starttls", "ssl")):
+            errores.append("email.smtp necesita host y seguridad starttls o ssl")
         if errores:
             raise ValueError("cliente.json inválido: " + "; ".join(errores))
 

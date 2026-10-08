@@ -2,7 +2,7 @@
 import datetime as dt
 import json
 
-from . import base, ia, wa
+from . import base, correo, ia, wa
 
 MOTIVOS = {
     "urgencia_medica": "posible urgencia médica",
@@ -49,10 +49,13 @@ def avisar_equipo(con, cfg, c, motivo, solo_dueno=False):
     """Plantilla aviso_equipo al equipo y al dueño (o solo al dueño). c=None para avisos del sistema."""
     quien = f"{c['nombre'] or 'cliente'} ({c['telefono']})" if c else "el sistema"
     link = link_bandeja(cfg, c["id"]) if c else cfg["url_publica"].rstrip("/") + "/bandeja"
+    params = [cfg["nombre"], quien, motivo_legible(motivo), link]
     dueno = base.normalizar_tel(cfg.get("dueno", {}).get("telefono", ""))
     for tel in ([dueno] if solo_dueno and dueno else sorted(cfg.internos)):
-        wa.enviar(con, cfg, tel, plantilla="aviso_equipo", params=[cfg["nombre"], quien, motivo_legible(motivo), link],
-                  autor="sistema")
+        wa.enviar(con, cfg, tel, plantilla="aviso_equipo", params=params, autor="sistema")
+    if cfg["email"]["avisos_a"]:   # el mismo texto que la plantilla, por si el WhatsApp del equipo no lo ve a tiempo
+        correo.enviar(cfg, cfg["email"]["avisos_a"], f"{cfg['nombre']}: {motivo_legible(motivo)}",
+                      wa.texto_plantilla("aviso_equipo", params))
 
 
 def handoff(con, cfg, cid, motivo, urgente=False):

@@ -5,7 +5,7 @@ import os
 import urllib.error
 import urllib.request
 
-from . import agenda, base, ia, wa
+from . import agenda, base, correo, ia, ms, wa
 
 PLANTILLAS = ["aviso_equipo", "retomar_contacto", "cita_confirmada", "recordatorio_cita", "seguimiento_1",
               "seguimiento_2", "seguimiento_3", "reactivacion", "resena"]
@@ -29,6 +29,11 @@ def locales(con, cfg):
         sa = os.environ.get("GOOGLE_SA_FILE", "")
         if not sa or not os.path.exists(sa):
             faltan.append("GOOGLE_SA_FILE")
+    em = cfg["email"]
+    if em["proveedor"] == "smtp" and not os.environ.get("SMTP_CLAVE"):
+        faltan.append("SMTP_CLAVE")
+    if "microsoft" in (em["proveedor"], cfg["agenda"]["proveedor"]):
+        faltan += [k for k in ms.SECRETOS if not os.environ.get(k) and k not in faltan]
     if faltan:
         (aviso if prueba else error)("faltan secretos: " + ", ".join(faltan))
     else:
@@ -47,6 +52,11 @@ def locales(con, cfg):
            f"· gastado este mes ${ia.costo_mes_usd(con, cfg):.2f}")
     except ia.IAError as e:
         error(str(e))
+    if correo.configurado(cfg):
+        (ok if em["avisos_a"] else aviso)(f"correo ({em['proveedor']}, desde {em['remitente']}): avisos a "
+                                          f"{', '.join(em['avisos_a']) or 'nadie'}")
+    else:
+        aviso("correo sin configurar: los avisos solo llegan por WhatsApp y el reporte no se manda por correo")
     (ok if cfg["resenas"].get("link") else aviso)(f"link de reseñas: {cfg['resenas'].get('link') or 'vacío (no se piden reseñas)'}")
     rotas = con.execute("SELECT COUNT(*) FROM entrada WHERE error IS NOT NULL").fetchone()[0]
     (aviso if rotas else ok)(f"entradas del webhook con error: {rotas}")
@@ -134,6 +144,11 @@ def remotos(con, cfg):
         r.append(("ERROR", f"Anthropic: {e.code} (clave o modelo inválido)"))
     except Exception as e:
         r.append(("ERROR", f"Anthropic: {e}"))
+    if correo.configurado(cfg):
+        try:
+            r.append(("OK", probar_correo(cfg)))
+        except Exception as e:
+            r.append(("ERROR", f"correo: {e}"))
     if cfg["agenda"]["proveedor"] == "google":
         try:
             agenda.ocupado_google(cfg, base.ahora(), base.ahora() + dt.timedelta(days=1))
@@ -146,6 +161,24 @@ def remotos(con, cfg):
 
 def url_webhook(cfg):
     return cfg["url_publica"].rstrip("/") + "/webhook"
+
+
+PERMISOS_MS = {"correo": {"Mail.Send"}}
+
+
+def probar_correo(cfg):
+    """Inicia sesión sin mandar nada (SMTP) o revisa que la app de Microsoft tenga Mail.Send concedido."""
+    em = cfg["email"]
+    if em["proveedor"] == "microsoft":
+        faltan = PERMISOS_MS["correo"] - ms.permisos()
+        if faltan:
+            raise RuntimeError(f"a la app de Microsoft le falta el permiso de aplicación {', '.join(faltan)} "
+                               "con consentimiento de administrador")
+        return f"correo Microsoft 365: token y permiso Mail.Send para {em['remitente']}"
+    with correo.conectar_smtp(cfg):
+        pass
+    s = em["smtp"]
+    return f"correo SMTP: sesión iniciada en {s['host']}:{s['puerto']} como {correo.usuario_smtp(cfg)}"
 
 
 def _correo_cuenta_servicio():

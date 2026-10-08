@@ -414,7 +414,7 @@ def crear_servidor(cfg, host="127.0.0.1", puerto=None):
                 return self.enviar(404, "en modo prueba no hay archivos reales", "text/plain")
             try:
                 datos, mime = wa.descargar_media(cfg, fila["media_id"])
-            except Exception as ex:  # vencido en Meta (≈30 días), red, demasiado grande
+            except Exception as ex:  # id vencido en Meta (7 días desde el webhook), red, demasiado grande
                 base.log("media:", ex)
                 return self.enviar(502, "no se pudo obtener el archivo de WhatsApp", "text/plain")
             mime = mime.split(";")[0].strip()

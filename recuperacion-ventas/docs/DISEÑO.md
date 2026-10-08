@@ -230,8 +230,8 @@ la red de la sesión de desarrollo bloquea los sitios de documentación; cada fi
 | Override por número: `POST /{phone_number_id}` con `webhook_configuration.override_callback_uri` (≤200 caracteres) y `verify_token`; lectura con `?fields=webhook_configuration` → `phone_number` / `whatsapp_business_account` / `application`; requisito: la app suscrita a la WABA | `verificar.configurar_override`, `remotos` | Coincide; se agregó el chequeo de `/{waba_id}/subscribed_apps` | [webhook overrides](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/override/) |
 | `GET /debug_token?input_token=` → `is_valid`, `expires_at` (0 = no vence), `scopes` | `verificar.token_meta` | Nuevo: avisa si el token vence en menos de 14 días o le faltan `whatsapp_business_messaging` / `whatsapp_business_management` | [debug_token](https://developers.facebook.com/docs/graph-api/reference/debug_token/) |
 | Firma `X-Hub-Signature-256: sha256=HMAC(app_secret, cuerpo)`, verificación `hub.mode/hub.verify_token/hub.challenge` | `wa.firma_valida`, `web` | Coincide | [webhooks](https://developers.facebook.com/docs/graph-api/webhooks/getting-started) |
-| Media: `GET /{media_id}` → `url`, `mime_type`; descarga con el mismo token (la URL vence en minutos) | `wa.descargar_media` | Coincide | [media](https://developers.facebook.com/docs/whatsapp/cloud-api/reference/media) |
-| Cuenta de servicio: JWT RS256 (`iss`, `scope`, `aud=token_uri`, `exp ≤ 1 h`) → `token_uri` | `agenda._token_google` | Coincide | [OAuth para servidores](https://developers.google.com/identity/protocols/oauth2/service-account) |
+| Media: `GET /{media_id}` → `url`, `mime_type`; descarga con el mismo token (la URL vence en 5 min; el id de un webhook, en 7 días) | `wa.descargar_media` | Coincide | [media](https://developers.facebook.com/documentation/business-messaging/whatsapp/business-phone-numbers/media) |
+| Cuenta de servicio: JWT RS256 (`iss`, `scope`, `aud=token_uri`, `exp ≤ 1 h`) → `token_uri` | `agenda._token_google` | Coincide | [OAuth para servidores](https://developers.google.com/accounts/docs/OAuth2ServiceAccount) |
 | `POST /calendar/v3/freeBusy` (`timeMin`, `timeMax`, `items[].id`); errores por calendario (`notFound` = no compartido) | `agenda.ocupado_google` | Coincide: un error por calendario ya cuenta como falla | [freebusy.query](https://developers.google.com/workspace/calendar/v3/reference/freebusy/query) |
 | `POST calendars/{id}/events`, `DELETE …/events/{id}` (404/410 = ya no existe) | `agenda` | Coincide | [events](https://developers.google.com/workspace/calendar/v3/reference/events) |
 
@@ -239,3 +239,27 @@ la red de la sesión de desarrollo bloquea los sitios de documentación; cada fi
 suscripción de la app a la WABA, override del webhook, cada plantilla, clave de Anthropic y lectura del calendario (con el
 correo de la cuenta de servicio con el que hay que compartirlo). La escritura en el calendario se prueba en `prueba-real`
 (crear un evento de prueba en el calendario del negocio desde `verificar` sería intrusivo).
+
+### 7.2 Correo saliente (fase 2): avisos y reporte
+
+`rv/correo.py` arma un `EmailMessage` (con `Message-ID` propio) y lo manda por uno de dos caminos, según `email.proveedor`:
+
+- **`smtp`** (`smtplib`): STARTTLS en 587 o SSL en 465, siempre cifrado antes de la clave; usuario `SMTP_USUARIO` o el
+  remitente, clave `SMTP_CLAVE`. Sirve para Gmail (contraseña de aplicación, con verificación en dos pasos), Zoho y
+  hosting. No sirve para Outlook.com/Hotmail personales: Microsoft ya no acepta contraseña por SMTP ahí.
+- **`microsoft`** (`rv/ms.py`): token de aplicación (client credentials, `scope=https://graph.microsoft.com/.default`)
+  y `POST /users/{remitente}/sendMail` (responde 202 sin cuerpo; guarda copia en Enviados por omisión). El SMTP de
+  Exchange Online con contraseña queda desactivado por omisión a fines de 2026, por eso Microsoft 365 va por Graph.
+
+Usos: `motor.avisar_equipo` manda también por correo a `email.avisos_a` el mismo texto de la plantilla `aviso_equipo`;
+`reporte --enviar` manda el reporte a `email.reporte_a` (o a `avisos_a`). Un correo que falla se registra en el log y
+no detiene nada. En modo prueba se escribe en `envios-prueba.log` como `correo:<destinos>`.
+
+| Qué | Documentación |
+|---|---|
+| `sendMail` (cuerpo `message`, 202, `saveToSentItems`) | [user-sendmail](https://learn.microsoft.com/en-us/graph/api/user-sendmail) |
+| Token de aplicación y `.default` | [daemon: obtener token](https://learn.microsoft.com/en-gb/entra/identity-platform/scenario-daemon-acquire-token) |
+| Permisos concedidos en el claim `roles` | [scopes y permisos](https://learn.microsoft.com/ar-sa/entra/identity-platform/scopes-oidc) |
+| Fin de SMTP AUTH básico en Exchange Online (MC786329) | [resumen del aviso](https://www.itelio.com/en/microsoft-message-center/MC786329) (fuente secundaria) |
+| Outlook.com sin contraseña por SMTP | [Microsoft Q&A](https://learn.microsoft.com/en-us/answers/questions/5900632/i-need-smtp-auth-enabled-for-my-account-******@hot) (fuente comunitaria) |
+| Gmail: contraseña de aplicación, smtp.gmail.com 587/465 | [guía Gmail SMTP](https://smtpedia.com/gmail) (fuente secundaria) |

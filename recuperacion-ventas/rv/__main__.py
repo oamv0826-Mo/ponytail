@@ -9,7 +9,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import base, motor, tick, ventas, verificar, wa, web
+from . import base, correo, motor, tick, ventas, verificar, wa, web
 
 
 def payload_falso(telefono, texto=None, nombre="", tipo="text", msg_id=None):
@@ -99,6 +99,12 @@ def cmd_reporte(cfg, args):
         except ValueError as e:
             sys.exit(str(e))
     ventas.guardar_reporte(cfg, mes, texto)
+    if args.enviar:
+        para = cfg["email"]["reporte_a"] or cfg["email"]["avisos_a"]
+        _, error = correo.enviar(cfg, para, f"Reporte de {mes} · {cfg['nombre']}", texto)
+        if error:
+            sys.exit(f"no se envió el reporte por correo: {error}")
+        print(f"Reporte enviado a {', '.join(para)}")
 
 
 def cmd_pagina(cfg, args):
@@ -185,6 +191,7 @@ def main(argv=None):
     r = sub.add_parser("reporte", help="reporte mensual (por defecto, el mes anterior)")
     r.add_argument("mes", nargs="?", help="AAAA-MM")
     r.add_argument("--resenas-google", type=int, help="reseñas nuevas en Google en el mes (dato manual)")
+    r.add_argument("--enviar", action="store_true", help="mandarlo por correo a email.reporte_a (o email.avisos_a)")
     pg = sub.add_parser("pagina", help="página estática que lleva a WhatsApp")
     pg.add_argument("--salida")
     vf = sub.add_parser("verificar", help="chequeos de instalación y salud")

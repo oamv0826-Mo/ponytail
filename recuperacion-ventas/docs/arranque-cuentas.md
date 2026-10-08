@@ -22,6 +22,7 @@ parecido. Los tiempos son aproximados.
 | 6 | Calendario de prueba | Gratis | 10 min | `agenda.calendar_id` → `cliente.json` |
 | 7 | VPS y dominio | 6 a 12 USD al mes, más el dominio | 1 h | **Solo cuando tengas el primer cliente** |
 | 8 | Respaldo externo con rclone | Gratis hasta 10 GB | 20 min | **Solo cuando tengas el primer cliente** |
+| 9 | Correo para avisos y reporte (opcional) | Gratis con Gmail; Microsoft 365 ya pagado por el negocio | 15 a 30 min | bloque `email` → `cliente.json`; `SMTP_CLAVE` o `MS_*` → `secretos.env` |
 
 Con los pasos 1 a 6 ya puedes hacer la prueba real desde tu Mac ([prueba-real.md](prueba-real.md)).
 
@@ -197,6 +198,59 @@ Contrátalo con el primer anticipo, no antes. Un solo servidor atiende a varios 
 2. Crea una clave de aplicación con acceso solo a ese bucket.
 3. En el servidor: `rclone config` → nuevo remoto llamado `respaldo`, con esa clave.
 4. El destino va en `/etc/rv/respaldo.env` (ver [runbook.md](runbook.md)), fuera de la carpeta del cliente.
+
+---
+
+## 9. Correo para avisos y reporte (opcional)
+
+**Costo:** gratis con una cuenta de Gmail; con Microsoft 365, lo que el negocio ya paga. **Tiempo:** 15 min (Gmail) o
+30 min (Microsoft 365, necesita a quien administra la cuenta del negocio).
+
+Los mismos avisos que llegan por WhatsApp al equipo (cliente pide humano, urgencia, escalamiento, tope de IA) llegan
+también por correo, y `reporte AAAA-MM --enviar` manda el reporte del mes.
+
+**Opción A: Gmail, Zoho o el correo del hosting (SMTP).**
+1. Gmail: activa la verificación en dos pasos en <https://myaccount.google.com/security> y luego crea una
+   **contraseña de aplicación** en <https://myaccount.google.com/apppasswords> (16 letras). La contraseña normal no
+   funciona. En cuentas de Google Workspace, el administrador puede tenerlas desactivadas.
+2. Zoho o hosting (cPanel): usa el servidor SMTP que te da el proveedor y la contraseña del buzón.
+
+```json
+"email": {"proveedor": "smtp", "remitente": "agora.clinica@gmail.com", "avisos_a": ["dueno@clinica.mx"],
+          "smtp": {"host": "smtp.gmail.com", "puerto": 587, "seguridad": "starttls"}}
+```
+
+| Dato | Va en `secretos.env` |
+|---|---|
+| La contraseña de aplicación (sin espacios) | `SMTP_CLAVE=...` |
+| Solo si el usuario no es el mismo que `remitente` | `SMTP_USUARIO=...` |
+
+**Outlook.com y Hotmail personales no sirven:** Microsoft ya no acepta contraseña (ni contraseña de aplicación) por
+SMTP en cuentas personales. Usa Gmail o el correo de un dominio propio.
+
+**Opción B: Microsoft 365 del negocio (Microsoft Graph).** La hace quien administra la cuenta de Microsoft del negocio.
+1. Entra a <https://entra.microsoft.com> → **Aplicaciones → Registros de aplicaciones → Nuevo registro**. Nombre:
+   "Agorá". Tipo de cuenta: solo este directorio. Sin URI de redirección.
+2. Anota el **Id. de aplicación (cliente)** y el **Id. de directorio (inquilino)**.
+3. **Permisos de API → Agregar → Microsoft Graph → Permisos de aplicación → `Mail.Send`**. Luego **Conceder
+   consentimiento de administrador**. Sin el consentimiento, el token sale bien pero el envío falla.
+4. **Certificados y secretos → Nuevo secreto de cliente** (vence: máximo 24 meses; anota la fecha). Copia el
+   **Valor** (no el Id.); solo se ve una vez.
+5. Recomendado: `Mail.Send` de aplicación permite enviar como cualquier buzón del negocio. Pide a quien administra
+   Exchange que limite la app al buzón de Agorá (control de acceso basado en roles para aplicaciones de Exchange Online).
+
+```json
+"email": {"proveedor": "microsoft", "remitente": "agora@clinica.mx", "avisos_a": ["dueno@clinica.mx"]}
+```
+
+| Dato | Va en `secretos.env` |
+|---|---|
+| Id. de directorio (inquilino) | `MS_TENANT_ID=...` |
+| Id. de aplicación (cliente) | `MS_CLIENT_ID=...` |
+| Valor del secreto | `MS_CLIENT_SECRET=...` |
+
+Comprueba con `python3 -m rv --cliente <carpeta> verificar --remoto`: inicia sesión en SMTP sin mandar nada, o revisa
+que el token de Microsoft traiga el permiso `Mail.Send`.
 
 ---
 

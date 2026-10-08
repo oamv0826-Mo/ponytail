@@ -170,3 +170,8 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - `verificar --remoto` revisa el token con `debug_token`: ERROR si vence en menos de 14 días o le faltan permisos de WhatsApp, porque Meta no avisa cuando un token se invalida y el primer síntoma sería un envío fallido.
 - `verificar --remoto` revisa `/{waba_id}/subscribed_apps`: sin la app suscrita a la WABA el override del número no recibe nada y el error no se ve en ningún otro lado.
 - La escritura en Google Calendar no se prueba desde `verificar` (crearía eventos en el calendario real del negocio); la cubre `prueba-real`.
+- Correo saliente con dos caminos: SMTP (stdlib) para Gmail/Zoho/hosting y Microsoft Graph para Microsoft 365, porque Exchange Online apaga el SMTP con contraseña a fines de 2026 y Graph con permiso de aplicación no depende de una contraseña de usuario.
+- Outlook.com/Hotmail personales no se soportan: Microsoft ya no acepta contraseña por SMTP y su OAuth delegado exige que una persona inicie sesión y renovar tokens; se recomienda Gmail o un dominio propio.
+- El aviso por correo usa el mismo texto que la plantilla `aviso_equipo` (una sola fuente) y va a `email.avisos_a`, aparte de los teléfonos del equipo.
+- El reporte mensual se manda por correo solo con `reporte --enviar`: el operador lo revisa antes de mandarlo, como ya decía el checklist mensual.
+- `verificar --remoto` prueba el correo sin mandar nada: inicia sesión SMTP o lee el claim `roles` del token de Microsoft, porque un token sin consentimiento de administrador sale bien y el envío falla después.

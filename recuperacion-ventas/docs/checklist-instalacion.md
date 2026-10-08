@@ -24,6 +24,7 @@ Paso a paso de cada cuenta, con costo y tiempo: [arranque-cuentas.md](arranque-c
 - [ ] **[dueño]** Link de reseña de Google (Perfil de Empresa → "Pedir reseñas") → `resenas.link`.
 - [ ] Perfil de Google: horario, fotos, teléfono/WhatsApp y enlace a la página (`pagina`). Es manual, no lo hace el sistema.
 - [ ] **[dueño]** Calendario: crear un calendario de Google para las citas y compartirlo con el correo de la cuenta de servicio con permiso "Hacer cambios en eventos" → `agenda.calendar_id`.
+- [ ] **[dueño]** Correo para avisos y reporte (opcional): Gmail con contraseña de aplicación o app de Microsoft 365 con `Mail.Send` ([arranque-cuentas.md §9](arranque-cuentas.md)) → bloque `email`.
 - [ ] **[dueño]** Base de clientes antiguos en CSV (`nombre,telefono,ultima_visita,consentimiento`), solo marcando "sí" a quien aceptó recibir mensajes.
 
 ## Semana 2: instalación técnica
@@ -46,5 +47,5 @@ Paso a paso de cada cuenta, con costo y tiempo: [arranque-cuentas.md](arranque-c
 
 ## Mensual
 - [ ] Revisar motivos de handoff del reporte y mejorar FAQ/mensajes.
-- [ ] `reporte AAAA-MM --resenas-google N` y reunión con el dueño (5 números + garantía en el segundo mes).
+- [ ] `reporte AAAA-MM --resenas-google N --enviar` (llega por correo a `email.reporte_a`) y reunión con el dueño (5 números + garantía en el segundo mes).
 - [ ] Prueba de restauración de un respaldo (ver runbook).
