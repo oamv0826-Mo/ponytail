@@ -140,8 +140,9 @@ ALTER TABLE mensaje ADD COLUMN media_id TEXT;
 ALTER TABLE mensaje ADD COLUMN media_mime TEXT;
 
 -- version: 4
--- Ventas: dos citas distintas pueden tener ventas del mismo monto el mismo día. Duplicado = misma cita y monto
+-- Ventas: dos citas distintas pueden tener ventas del mismo monto el mismo día. Duplicado = misma cita, fecha y monto
 -- (doble clic) o, sin cita, mismo contacto, fecha y monto (reimportar el mismo CSV).
+-- (Corregida en la ronda 7 antes de llegar a producción: sin la fecha, una base con pagos a plazos fallaba aquí.)
 CREATE TABLE venta_v4 (
   id INTEGER PRIMARY KEY,
   contacto_id INTEGER NOT NULL REFERENCES contacto(id),
@@ -156,4 +157,9 @@ INSERT INTO venta_v4 SELECT id, contacto_id, cita_id, monto_centavos, fecha, ori
 DROP TABLE venta;
 ALTER TABLE venta_v4 RENAME TO venta;
 CREATE UNIQUE INDEX venta_sin_cita ON venta(contacto_id, fecha, monto_centavos) WHERE cita_id IS NULL;
-CREATE UNIQUE INDEX venta_por_cita ON venta(cita_id, monto_centavos) WHERE cita_id IS NOT NULL;
+CREATE UNIQUE INDEX venta_por_cita ON venta(cita_id, fecha, monto_centavos) WHERE cita_id IS NOT NULL;
+
+-- version: 5
+-- Pagos a plazos: la misma cita puede tener pagos iguales en días distintos (bases que ya aplicaron la v4 original).
+DROP INDEX IF EXISTS venta_por_cita;
+CREATE UNIQUE INDEX venta_por_cita ON venta(cita_id, fecha, monto_centavos) WHERE cita_id IS NOT NULL;

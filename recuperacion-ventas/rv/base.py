@@ -1,6 +1,7 @@
 """Config, tiempo/horarios, teléfonos, texto y base de datos. Lo que todos los módulos comparten."""
 import contextlib
 import datetime as dt
+import fcntl
 import gzip
 import json
 import os
@@ -287,7 +288,17 @@ def secciones_esquema():
 
 
 def migrar(con, ruta_db=None):
-    actual = con.execute("PRAGMA user_version").fetchone()[0]
+    """Aplica las secciones pendientes. Con ruta_db, bajo un candado de archivo: serve y tick arrancan juntos tras
+    una actualización y sin candado el segundo intentaría aplicar la misma migración ("duplicate column")."""
+    if ruta_db is None:
+        return _migrar(con, None)
+    with open(f"{ruta_db}.migrar.lock", "w") as candado:
+        fcntl.flock(candado, fcntl.LOCK_EX)
+        return _migrar(con, ruta_db)
+
+
+def _migrar(con, ruta_db):
+    actual = con.execute("PRAGMA user_version").fetchone()[0]   # se lee ya con el candado tomado
     pendientes = [(v, sql) for v, sql in secciones_esquema() if v > actual]
     if pendientes and actual > 0 and ruta_db:
         respaldar(con, Path(ruta_db).parent / "respaldos")

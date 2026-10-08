@@ -262,3 +262,53 @@ class Ronda6CSV(Caso):
         r = ventas.importar_ventas(self.con, self.cfg, ruta)
         self.assertEqual((r["registradas"], r["rechazadas"]), (1, []))
         self.assertEqual(self.con.execute("SELECT fecha, monto_centavos FROM venta").fetchone()[:], ("2026-10-06", 125000))
+
+
+class Ronda7Migraciones(Caso):
+    def test_varios_procesos_migrando_a_la_vez_no_fallan(self):
+        ruta = self.dir / "vieja.db"
+        con = base.conectar(ruta)
+        with mock.patch.object(base, "secciones_esquema", return_value=base.secciones_esquema()[:1]):
+            base.migrar(con)
+        con.close()
+        errores = []
+
+        def migra():
+            c = base.conectar(ruta)
+            try:
+                base.migrar(c, ruta)
+            except Exception as e:  # noqa: BLE001
+                errores.append(repr(e))
+            finally:
+                c.close()
+        hilos = [threading.Thread(target=migra) for _ in range(4)]
+        [h.start() for h in hilos]
+        [h.join() for h in hilos]
+        self.assertEqual(errores, [])
+
+    def test_pagos_a_plazos_de_la_misma_cita(self):
+        from ayuda import local
+        from rv import agenda, ventas
+        self.escribir("hola")
+        c = self.contacto()
+        cita = agenda.reservar(self.con, self.cfg, c, "blanqueamiento", local(2026, 10, 6, 12, 0), creado_por="humano:ana")
+        self.t = local(2026, 10, 20, 12, 0)
+        self.assertIsNone(ventas.registrar_venta(self.con, self.cfg, c["id"], "1750", "2026-10-06", "x", cita)[1])
+        self.assertIsNone(ventas.registrar_venta(self.con, self.cfg, c["id"], "1750", "2026-10-20", "x", cita)[1])
+        self.assertIn("misma cita", ventas.registrar_venta(self.con, self.cfg, c["id"], "1750", "2026-10-20", "x", cita)[1])
+
+    def test_base_con_la_v4_original_se_corrige_con_la_v5(self):
+        ruta = self.dir / "v4.db"
+        con = base.conectar(ruta)
+        with mock.patch.object(base, "secciones_esquema", return_value=[x for x in base.secciones_esquema() if x[0] <= 4]):
+            base.migrar(con)
+        con.executescript("DROP INDEX venta_por_cita; "
+                          "CREATE UNIQUE INDEX venta_por_cita ON venta(cita_id, monto_centavos) WHERE cita_id IS NOT NULL;")
+        base.migrar(con, ruta)
+        con.execute("INSERT INTO contacto (telefono, creado) VALUES ('+528100000001', 'x')")
+        con.execute("INSERT INTO cita (contacto_id, servicio_id, inicio, fin, creado, creado_por) VALUES (1,'x','a','b','c','d')")
+        for fecha in ("2026-10-06", "2026-10-20"):
+            con.execute("INSERT INTO venta (contacto_id, cita_id, monto_centavos, fecha, origen, registrado_por, creado) "
+                        "VALUES (1, 1, 175000, ?, 'x', 'x', 'x')", (fecha,))
+        self.assertEqual(con.execute("SELECT COUNT(*) FROM venta").fetchone()[0], 2)
+        con.close()

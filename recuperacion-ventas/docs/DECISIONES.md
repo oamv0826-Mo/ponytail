@@ -158,3 +158,5 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - Login: bloqueo de 15 min tras 5 fallos por usuario y tras 20 por IP (antes 5 y 5): un error de una persona no deja fuera a toda la oficina.
 - CSV: UTF-8 o Windows-1252; separador coma, punto y coma o tab (se elige el más frecuente en el encabezado); alias de columnas comunes; fechas AAAA-MM-DD o DD/MM/AAAA (nunca MM/DD: en México el día va primero).
 - Teléfonos: 044/045 + 10 dígitos y 01 + 10 dígitos (marcación antigua) se convierten a +52 + 10; un número nacional con 0 inicial se rechaza.
+- Migraciones bajo candado de archivo (`fcntl`, Linux) para que dos procesos que arrancan juntos no apliquen la misma migración.
+- Venta duplicada con cita = misma cita, fecha y monto (antes sin fecha): los pagos a plazos iguales en días distintos son ventas distintas. Se ajustó la sección v4 del esquema, que aún no estaba en ninguna instalación real, y la v5 corrige las bases de prueba que ya la tenían.

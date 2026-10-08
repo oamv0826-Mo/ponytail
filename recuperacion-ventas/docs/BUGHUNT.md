@@ -1,6 +1,6 @@
 # Ciclo autónomo de caza de errores
 
-Estado: rondas = 6 · rondas seguidas sin hallazgos = 0 · se detiene con 2 limpias seguidas o al llegar a 8.
+Estado: rondas = 7 · rondas seguidas sin hallazgos = 0 · se detiene con 2 limpias seguidas o al llegar a 8.
 
 Orden de áreas: 1 motor/guardrails IA · 2 agenda/Google · 3 tick/ventanas · 4 ventas/atribución/reporte ·
 5 bandeja/seguridad · 6 CSV/teléfonos · 7 migraciones/respaldo/caídas · 8 kit (auditoria, demo, prueba) ·
@@ -62,3 +62,11 @@ Revisado sin hallazgos: escape de todo dato del cliente en bandeja/citas/ventas,
 | 5 | Teléfonos con prefijos antiguos 044/045/01 o de 10 dígitos con 0 inicial se aceptaban como números inválidos (+044…, +01…, +5208…). | 044/045 + 10 y 01 + 10 se convierten a +52 + 10; cualquier número que quede con 0 inicial se rechaza. | `test_prefijos_antiguos_de_mexico_y_numeros_con_cero` |
 
 Prueba existente actualizada: `test_e4.Atribucion.test_importar_ventas` usaba "06/10/2026" como fecha inválida; ahora es válida a propósito y se usa "2026/13/45".
+
+## Ronda 7 · migraciones, respaldo y recuperación tras caída
+| # | Hallazgo (reproducido) | Corrección | Prueba |
+|---|---|---|---|
+| 1 | Tras una actualización, `serve` y `tick` arrancan juntos y ambos aplicaban la misma migración: el segundo fallaba con "duplicate column name" (3 de 3 corridas con 4 procesos). | Candado de archivo (`datos.db.migrar.lock`) alrededor de la migración y relectura de la versión ya con el candado. | `test_varios_procesos_migrando_a_la_vez_no_fallan` |
+| 2 | Regresión de la ronda 4: dos pagos iguales de la misma cita en días distintos (pago a plazos) se rechazaban como duplicado; además, una base con esos datos haría fallar la migración v4. | Duplicado con cita = misma cita, fecha y monto. Esquema v5 corrige las bases que ya tenían la v4; la v4 se ajustó (nunca llegó a producción). | `test_pagos_a_plazos_de_la_misma_cita`, `test_base_con_la_v4_original_se_corrige_con_la_v5` |
+
+Revisado sin hallazgos: respaldo consistente con temporal único, restauración, rollback de migración fallida, retoma de entradas a medias tras caída (ronda de revisión anterior).

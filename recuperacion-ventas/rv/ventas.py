@@ -158,7 +158,7 @@ def registrar_venta(con, cfg, contacto_id, monto, fecha, por, cita_id=None):
                       "creado) VALUES (?,?,?,?,?,?,?)", (contacto_id, cita_id, centavos, f.isoformat(), origen, por,
                                                          base.iso(base.ahora())))
     if cur.rowcount == 0:
-        return None, ("esa venta ya estaba registrada (misma cita y monto)" if cita_id else
+        return None, ("esa venta ya estaba registrada (misma cita, fecha y monto)" if cita_id else
                       "esa venta ya estaba registrada (mismo contacto, fecha y monto)")
     return cur.lastrowid, None
 
