@@ -10,9 +10,9 @@ import secrets
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
-from . import base, motor, wa
+from . import agenda, base, motor, ventas, wa
 
 MAX_WEBHOOK = 1_000_000
 MAX_FORM = 64_000
@@ -141,19 +141,14 @@ def hora_local(cfg, s):
     return t.astimezone(cfg.tz).strftime("%d/%m %H:%M") if t else ""
 
 
-def ventana_abierta(c):
-    u = base.de_iso(c["ultimo_entrante"])
-    return bool(u) and base.ahora() - u < dt.timedelta(hours=24)
-
-
 def html_lista(con, cfg, usuario, filtro):
     where = {"pendientes": "WHERE c.estado='humano' AND c.asignado_a IS NULL",
              "mias": "WHERE c.asignado_a=?", "todas": ""}.get(filtro, "WHERE c.estado='humano'")
     params = (usuario,) if filtro == "mias" else ()
     filas = con.execute(
-        "SELECT c.*, (SELECT texto FROM mensaje m WHERE m.contacto_id=c.id ORDER BY m.id DESC LIMIT 1) AS ultimo, "
-        "(SELECT creado FROM mensaje m WHERE m.contacto_id=c.id ORDER BY m.id DESC LIMIT 1) AS cuando "
-        f"FROM contacto c {where} ORDER BY c.estado='humano' DESC, cuando DESC LIMIT 200", params).fetchall()
+        "SELECT c.*, m.texto AS ultimo, m.creado AS cuando FROM contacto c "
+        "LEFT JOIN mensaje m ON m.id=(SELECT MAX(id) FROM mensaje WHERE contacto_id=c.id) "
+        f"{where} ORDER BY c.estado='humano' DESC, cuando DESC LIMIT 200", params).fetchall()
     bp = e(cfg.base_path)
     if not filas:
         return "<p>No hay conversaciones aquí.</p>"
@@ -179,7 +174,7 @@ def html_media(cfg, m):
     if mime.startswith("audio/") and mime in MEDIA_EN_LINEA:
         return f"<br><audio controls preload='none' src='{url}'></audio>"
     if mime.startswith("image/") and mime in MEDIA_EN_LINEA:
-        return f"<br><a href='{url}'><img src='{url}' alt='foto del cliente' style='max-width:240px'></a>"
+        return f"<br><a href='{url}'><img src='{url}' loading='lazy' alt='foto del cliente' style='max-width:240px'></a>"
     return f"<br><a href='{url}'>Abrir archivo</a>"
 
 
@@ -195,7 +190,7 @@ def html_mensajes(con, cfg, cid):
 def html_conversacion(con, cfg, c, usuario):
     bp, cid = e(cfg.base_path), c["id"]
     optout = base.dio_baja(con, c["telefono"])
-    abierta = ventana_abierta(c)
+    abierta = base.ventana_abierta(c)
     accion = lambda ruta, texto: (f"<form class='inline' method='post' action='{bp}/bandeja/c/{cid}/{ruta}'>"  # noqa: E731
                                   f"<button>{texto}</button></form>")
     info = (f"<h1>{e(c['nombre'] or c['telefono'])}</h1><p>{e(c['telefono'])} · Atiende: "
@@ -216,17 +211,15 @@ def html_conversacion(con, cfg, c, usuario):
     else:
         resp = ("<p class='aviso'>Ventana de 24 h cerrada: solo se puede enviar la plantilla de retomar contacto.</p>"
                 + accion("retomar", "Enviar plantilla de retomar contacto"))
-    extra = "".join(f(con, cfg, c) for f in EXTRAS_CONVERSACION)
-    script = (f"<script>setInterval(()=>fetch('{bp}/bandeja/c/{cid}/mensajes').then(r=>r.ok&&r.text())"
-              f".then(h=>{{if(h)document.getElementById('msgs').innerHTML=h}}),10000)</script>")
+    extra = agenda.html_agendar(con, cfg, c) + ventas.html_ventas_conversacion(con, cfg, c)
+    script = refrescar(f"{bp}/bandeja/c/{cid}/mensajes", "msgs")
     return f"{info}<p>{botones}</p><div id='msgs'>{html_mensajes(con, cfg, cid)}</div>{resp}{extra}{script}"
 
 
-# Etapas siguientes agregan secciones a la conversación (agendar, registrar venta) y rutas POST.
-EXTRAS_CONVERSACION = []
-ACCIONES_EXTRA = {}   # nombre → función(con, cfg, c, usuario, form) → mensaje de error o None
-RUTAS_POST_EXTRA = {}  # ruta → función(con, cfg, usuario, form) → ruta a la que redirigir
-PAGINAS_EXTRA = {}    # ruta → función(con, cfg, usuario, query) → html
+def refrescar(url, id_):
+    """Sondeo cada 10 s; solo reemplaza el HTML si cambió (no vuelve a pedir las fotos)."""
+    return (f"<script>{{let u;setInterval(()=>fetch('{url}').then(r=>r.ok&&r.text()).then(h=>{{"
+            f"if(h&&h!==u){{u=h;document.getElementById('{id_}').innerHTML=h}}}}),10000)}}</script>")
 
 
 def accion_conversacion(con, cfg, c, usuario, nombre, form):
@@ -244,7 +237,7 @@ def accion_conversacion(con, cfg, c, usuario, nombre, form):
         texto = (form.get("texto") or [""])[0].strip()
         if not texto:
             return "Escribe un mensaje."
-        if not ventana_abierta(c):
+        if not base.ventana_abierta(c):
             return "La ventana de 24 h está cerrada."
         con.execute("UPDATE contacto SET asignado_a=COALESCE(asignado_a, ?) WHERE id=?", (usuario, cid))
         _, ok = motor.responder(con, cfg, c, texto[:2000], autor=f"humano:{usuario}")
@@ -256,8 +249,10 @@ def accion_conversacion(con, cfg, c, usuario, nombre, form):
             return "Fuera del horario de envío (9:00 a 20:00, lunes a sábado)."
         wa.enviar(con, cfg, c["telefono"], plantilla="retomar_contacto", params=[c["nombre"], cfg["nombre"]],
                   contacto_id=cid, autor=f"humano:{usuario}")
-    elif nombre in ACCIONES_EXTRA:
-        return ACCIONES_EXTRA[nombre](con, cfg, c, usuario, form)
+    elif nombre == "agendar":
+        return agenda.accion_agendar(con, cfg, c, usuario, form)
+    elif nombre == "venta":
+        return ventas.accion_venta(con, cfg, c, usuario, form)
     else:
         return "Acción desconocida."
     return None
@@ -346,8 +341,7 @@ def crear_servidor(cfg, host="127.0.0.1", puerto=None):
                     filtro = (q.get("f") or ["pendientes"])[0]
                     tabs = " ".join(f"<a href='{e(bp)}/bandeja?f={k}'>{'<strong>' + t + '</strong>' if k == filtro else t}</a>"
                                     for k, t in (("pendientes", "Pendientes de humano"), ("mias", "Mías"), ("todas", "Todas")))
-                    script = (f"<script>setInterval(()=>fetch('{e(bp)}/bandeja/lista?f={e(filtro)}').then(r=>r.ok&&r.text())"
-                              f".then(h=>{{if(h)document.getElementById('lista').innerHTML=h}}),10000)</script>")
+                    script = refrescar(f"{e(bp)}/bandeja/lista?f={e(filtro)}", "lista")
                     return self.enviar(200, pagina(cfg, "Bandeja", f"<nav>{tabs}</nav><div id='lista'>"
                                                    f"{html_lista(con, cfg, usuario, filtro)}</div>{script}", usuario))
                 if u.path == "/bandeja/lista":
@@ -366,8 +360,8 @@ def crear_servidor(cfg, host="127.0.0.1", puerto=None):
                 m = re.fullmatch(r"/bandeja/media/(\d+)", u.path)
                 if m:
                     return self.media(con, int(m.group(1)))
-                if u.path in PAGINAS_EXTRA:
-                    return self.enviar(200, pagina(cfg, "Bandeja", PAGINAS_EXTRA[u.path](con, cfg, usuario, q), usuario))
+                if u.path == "/bandeja/citas":
+                    return self.enviar(200, pagina(cfg, "Bandeja", agenda.pagina_citas(con, cfg, usuario, q), usuario))
             self.enviar(404, "no encontrado", "text/plain")
 
         # --- POST ---
@@ -406,11 +400,10 @@ def crear_servidor(cfg, host="127.0.0.1", puerto=None):
                     if not c:
                         return self.enviar(404)
                     error = accion_conversacion(con, cfg, c, usuario, m.group(2), form)
-                    destino = f"/bandeja/c/{c['id']}" + (f"?error={_q(error)}" if error else "")
+                    destino = f"/bandeja/c/{c['id']}" + (f"?error={quote(error)}" if error else "")
                     return self.redirigir(destino)
-                if u.path in RUTAS_POST_EXTRA:
-                    destino = RUTAS_POST_EXTRA[u.path](con, cfg, usuario, form)
-                    return self.redirigir(destino or "/bandeja")
+                if u.path == "/bandeja/citas/marcar":
+                    return self.redirigir(agenda.marcar_cita(con, cfg, usuario, form) or "/bandeja")
             self.enviar(404, "no encontrado", "text/plain")
 
         def media(self, con, mensaje_id):
@@ -444,13 +437,7 @@ def crear_servidor(cfg, host="127.0.0.1", puerto=None):
     srv = ThreadingHTTPServer((host, puerto or cfg["puerto"]), H)
     srv.daemon_threads = True
     srv.despertar = despertar
-    srv.limitador = limitador
     return srv
-
-
-def _q(s):
-    from urllib.parse import quote
-    return quote(s)
 
 
 def form_login(cfg, error=""):
@@ -476,9 +463,7 @@ def trabajador(cfg, despertar, parar):
 
 
 def servir(cfg):
-    con = base.abrir_db(cfg)  # migra antes de atender
-    con.close()
-    srv = crear_servidor(cfg)
+    srv = crear_servidor(cfg)  # __main__ ya migró la base (abrir_db)
     parar = threading.Event()
     threading.Thread(target=trabajador, args=(cfg, srv.despertar, parar), daemon=True).start()
     base.log(f"rv escuchando en 127.0.0.1:{srv.server_address[1]} ({'MODO PRUEBA' if cfg['modo_prueba'] else 'producción'})")
@@ -487,14 +472,3 @@ def servir(cfg):
     finally:
         parar.set()
 
-
-# ---------- registro de secciones de etapas posteriores ----------
-from . import agenda, ventas  # noqa: E402
-
-EXTRAS_CONVERSACION.append(agenda.html_agendar)
-ACCIONES_EXTRA["agendar"] = agenda.accion_agendar
-PAGINAS_EXTRA["/bandeja/citas"] = agenda.pagina_citas
-RUTAS_POST_EXTRA["/bandeja/citas/marcar"] = agenda.marcar_cita
-EXTRAS_CONVERSACION.append(ventas.html_ventas_conversacion)
-ACCIONES_EXTRA["venta"] = ventas.accion_venta
-agenda.EXTRAS_FILA_CITA.append(ventas.html_venta_en_cita)

@@ -344,3 +344,14 @@ class Ronda8Auditoria(Caso):
         negocios, errores = self.leer("nombre,x\nA,1\n")
         self.assertEqual(negocios, [])
         self.assertIn("columna 'negocio'", errores[0][1])
+
+
+class Simplificacion(Caso):
+    def test_transaccion_deshace_todo_si_algo_falla(self):
+        with self.assertRaises(ValueError), base.transaccion(self.con):
+            self.con.execute("INSERT INTO estado (clave, valor) VALUES ('a', '1')")
+            raise ValueError("fila rota")
+        self.assertIsNone(base.get_estado(self.con, "a"))
+        with base.transaccion(self.con):
+            self.con.execute("INSERT INTO estado (clave, valor) VALUES ('a', '1')")
+        self.assertEqual(base.get_estado(self.con, "a"), "1")

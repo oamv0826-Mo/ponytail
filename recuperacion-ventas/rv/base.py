@@ -105,6 +105,9 @@ class Config(dict):
         self.palabras = {k: [normalizar_texto(p) for p in v] for k, v in self["palabras"].items()}
         self.validar()
 
+    def nombre_servicio(self, sid, defecto=None):
+        return self.servicios.get(sid, {}).get("nombre", sid if defecto is None else defecto)
+
     def validar(self):
         errores = []
         for campo in ("nombre", "horario", "servicios", "fecha_inicio", "mensualidad_mxn"):
@@ -165,17 +168,16 @@ def intervalos_dia(cfg, fecha):
             for a, b in cfg["horario"].get(DIAS[fecha.weekday()], [])]
 
 
-def abierto(cfg, t):
-    local = t.astimezone(cfg.tz)
-    return any(a <= local < b for a, b in intervalos_dia(cfg, local.date()))
-
-
 def inicio_apertura_actual(cfg, t):
     local = t.astimezone(cfg.tz)
     for a, b in intervalos_dia(cfg, local.date()):
         if a <= local < b:
             return a.astimezone(UTC)
     return None
+
+
+def abierto(cfg, t):
+    return inicio_apertura_actual(cfg, t) is not None
 
 
 def proxima_apertura(cfg, t):
@@ -188,14 +190,10 @@ def proxima_apertura(cfg, t):
     return None
 
 
-def dia_cerrado(cfg, fecha):
-    return not intervalos_dia(cfg, fecha)
-
-
 def en_ventana_envio(cfg, t):
     """Proactivos: 9:00-20:00 locales, nunca domingo ni día cerrado del config."""
     local = t.astimezone(cfg.tz)
-    if local.weekday() == 6 or dia_cerrado(cfg, local.date()):
+    if local.weekday() == 6 or not intervalos_dia(cfg, local.date()):
         return False
     a, b = (_hm(x) for x in cfg["envios"]["ventana"])
     return a <= local.time() < b
@@ -312,12 +310,19 @@ def _migrar(con, ruta_db):
 
 
 @contextlib.contextmanager
-def db(cfg):
-    con = conectar(cfg.carpeta / "datos.db")
+def transaccion(con):
+    """Una sola transacción (un solo fsync) para importaciones de miles de filas; si algo falla no queda a medias."""
+    con.execute("BEGIN")
     try:
         yield con
-    finally:
-        con.close()
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+    con.execute("COMMIT")
+
+
+def db(cfg):
+    return contextlib.closing(conectar(cfg.carpeta / "datos.db"))
 
 
 def abrir_db(cfg):
@@ -356,6 +361,12 @@ NO_REACCION = "texto NOT LIKE '[reacción%'"
 
 def dio_baja(con, telefono):
     return con.execute("SELECT 1 FROM optout WHERE telefono=?", (telefono,)).fetchone() is not None
+
+
+def ventana_abierta(c):
+    """Ventana de 24 h de Meta para texto libre: abierta si el contacto escribió hace menos de 24 h."""
+    u = de_iso(c["ultimo_entrante"])
+    return bool(u) and ahora() - u < dt.timedelta(hours=24)
 
 
 def get_estado(con, clave, defecto=None):

@@ -5,6 +5,7 @@ import html
 import io
 import re
 import statistics
+from collections import Counter
 import urllib.parse
 
 from . import base, motor
@@ -77,11 +78,10 @@ def importar_clientes(con, cfg, ruta):
             r["rechazados"].append((linea, f"consentimiento no reconocido: {d.get('consentimiento')!r}"))
             continue
         consent = 1 if consent_txt in SI else 0 if consent_txt in NO else None
-        visita = d.get("ultima_visita") or None
-        if visita and not fecha_csv(visita):
-            r["rechazados"].append((linea, f"ultima_visita no es fecha (AAAA-MM-DD o DD/MM/AAAA): {visita!r}"))
+        crudo, visita = d.get("ultima_visita"), fecha_csv(d.get("ultima_visita"))
+        if crudo and not visita:
+            r["rechazados"].append((linea, f"ultima_visita no es fecha (AAAA-MM-DD o DD/MM/AAAA): {crudo!r}"))
             continue
-        visita = fecha_csv(visita) if visita else None
         nombre = d.get("nombre", "")[:60]
         existe = con.execute("SELECT * FROM contacto WHERE telefono=?", (tel,)).fetchone()
         if existe:
@@ -238,13 +238,12 @@ def datos_reporte(con, cfg, mes):
         "SELECT origen, COUNT(*), SUM(monto_centavos) FROM venta WHERE fecha>=? AND fecha<? GROUP BY origen",
         (a.date().isoformat(), b.date().isoformat()))}
     cuenta = lambda sql, *p: con.execute(sql, p).fetchone()[0]  # noqa: E731
-    motivos = {}
-    for (d,) in con.execute("SELECT detalle FROM evento WHERE tipo='handoff' AND creado>=? AND creado<?", (A, B)):
-        k = motor.motivo_legible(d)
-        motivos[k] = motivos.get(k, 0) + 1
+    ev = dict(con.execute("SELECT tipo, COUNT(*) FROM evento WHERE creado>=? AND creado<? GROUP BY tipo", (A, B)).fetchall())
+    motivos = Counter(motor.motivo_legible(d) for (d,) in con.execute(
+        "SELECT detalle FROM evento WHERE tipo='handoff' AND creado>=? AND creado<?", (A, B)))
     return {
         "mes": mes, "consultas": len(consultas),
-        "fuera_horario": cuenta("SELECT COUNT(*) FROM evento WHERE tipo='fuera_horario' AND creado>=? AND creado<?", A, B),
+        "fuera_horario": ev.get("fuera_horario", 0),
         "mediana_s": statistics.median(tiempos) if tiempos else None,
         "pct_5min": (100 * sum(1 for x in tiempos if x <= 300) / len(tiempos)) if tiempos else None,
         "sin_respuesta": sin_respuesta,
@@ -260,10 +259,9 @@ def datos_reporte(con, cfg, mes):
         "ventas": ventas,
         "recuperado": sum(ventas.get(o, (0, 0))[1] or 0 for o in RECUPERADAS),
         "recuperadas_n": sum(ventas.get(o, (0, 0))[0] for o in RECUPERADAS),
-        "resenas": cuenta("SELECT COUNT(*) FROM evento WHERE tipo='resena' AND creado>=? AND creado<?", A, B),
-        "seguimientos": cuenta("SELECT COUNT(*) FROM evento WHERE tipo='seguimiento' AND creado>=? AND creado<?", A, B),
-        "reactivaciones": cuenta("SELECT COUNT(*) FROM evento WHERE tipo='reactivacion' AND creado>=? AND creado<?", A, B),
-        "motivos_handoff": sorted(motivos.items(), key=lambda x: -x[1]),
+        "resenas": ev.get("resena", 0), "seguimientos": ev.get("seguimiento", 0),
+        "reactivaciones": ev.get("reactivacion", 0),
+        "motivos_handoff": motivos.most_common(),
         "costo_ia_usd": cuenta("SELECT COALESCE(SUM(costo_micro_usd),0) FROM ia_uso WHERE creado>=? AND creado<?",
                                A, B) / 1_000_000,
         "garantia": garantia(con, cfg),
@@ -274,6 +272,13 @@ def _duracion(seg):
     if seg is None:
         return "sin datos"
     return f"{seg:.0f} s" if seg < 60 else f"{seg / 60:.1f} min" if seg < 3600 else f"{seg / 3600:.1f} h"
+
+
+def guardar_reporte(cfg, mes, texto):
+    carpeta = cfg.carpeta / "reportes"
+    carpeta.mkdir(exist_ok=True)
+    (carpeta / f"reporte-{mes}.md").write_text(texto, encoding="utf-8")
+    print(texto)
 
 
 def reporte(con, cfg, mes, resenas_google=None):

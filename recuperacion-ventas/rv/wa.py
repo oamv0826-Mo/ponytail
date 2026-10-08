@@ -15,10 +15,7 @@ SECRETO_PRUEBA = "secreto-de-prueba"
 
 
 def app_secret(cfg):
-    s = os.environ.get("WA_APP_SECRET", "")
-    if not s and cfg["modo_prueba"]:
-        return SECRETO_PRUEBA
-    return s
+    return os.environ.get("WA_APP_SECRET") or (SECRETO_PRUEBA if cfg["modo_prueba"] else "")
 
 
 def firmar(secreto, cuerpo):

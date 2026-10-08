@@ -5,14 +5,13 @@ import hashlib
 import html
 import json
 import os
-import re
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
-from . import base, ia, motor, wa
+from . import base, ia, motor, ventas, wa
 
 LOCK = threading.Lock()  # reserva = consultar disponibilidad + crear, sin intercalarse con otra reserva del proceso
 GOOGLE_SCOPE = "https://www.googleapis.com/auth/calendar"
@@ -220,11 +219,6 @@ def horarios_libres(con, cfg, servicio_id, n=3, excluir_cita=None):
 
 # ---------- acciones ----------
 
-def citas_futuras(con, cid):
-    return con.execute("SELECT * FROM cita WHERE contacto_id=? AND estado='agendada' AND inicio>? ORDER BY inicio",
-                       (cid, base.iso(base.ahora()))).fetchall()
-
-
 def _guardar_propuesta(con, cid, datos):
     datos["expira"] = base.iso(base.ahora() + dt.timedelta(hours=24))
     con.execute("UPDATE contacto SET propuesta=? WHERE id=?", (json.dumps(datos), cid))
@@ -300,14 +294,14 @@ def ejecutar(con, cfg, c, r):
         if r["texto"] and not ia.problema_texto(cfg, r["texto"]):
             return motor.responder(con, cfg, c, r["texto"])   # la IA pregunta qué servicio
         return motor.handoff(con, cfg, c["id"], "ia:proponer_cita sin servicio")
-    citas = citas_futuras(con, c["id"])
+    citas = motor.citas_futuras(con, c["id"])
     if not _cambio_simple(cfg, citas):
         return motor.handoff(con, cfg, c["id"], "cambio_cita_complejo")
     cita = citas[0]
     if r["accion"] == "cancelar_cita":
         _guardar_propuesta(con, c["id"], {"tipo": "cancelar", "cita_id": cita["id"]})
         return motor.responder(con, cfg, c, cfg.msg["confirmar_cancelacion"].format(
-            servicio=cfg.servicios.get(cita["servicio_id"], {}).get("nombre", cita["servicio_id"]),
+            servicio=cfg.nombre_servicio(cita["servicio_id"]),
             fecha=base.fecha_humana(cfg, base.de_iso(cita["inicio"]))))
     return proponer(con, cfg, c, cita["servicio_id"], reprograma=cita["id"])
 
@@ -408,8 +402,8 @@ e = html.escape
 
 def html_agendar(con, cfg, c):
     bp = e(cfg.base_path)
-    citas = citas_futuras(con, c["id"])
-    lista = "".join(f"<li>{e(cfg.servicios.get(x['servicio_id'], {}).get('nombre', x['servicio_id']))}: "
+    citas = motor.citas_futuras(con, c["id"])
+    lista = "".join(f"<li>{e(cfg.nombre_servicio(x['servicio_id']))}: "
                     f"{e(base.fecha_humana(cfg, base.de_iso(x['inicio'])))}</li>" for x in citas)
     opciones = "".join(f"<option value='{e(s['id'])}'>{e(s['nombre'])}</option>" for s in cfg.servicios.values())
     return (f"<h2>Citas</h2>{'<ul>' + lista + '</ul>' if lista else '<p>Sin citas próximas.</p>'}"
@@ -438,8 +432,7 @@ def accion_agendar(con, cfg, c, usuario, form):
         return "Ese horario está ocupado."
     fecha = base.fecha_humana(cfg, inicio)
     nombre = cfg.servicios[sid]["nombre"]
-    from .web import ventana_abierta
-    if ventana_abierta(c):
+    if base.ventana_abierta(c):
         motor.responder(con, cfg, c, cfg.msg["cita_confirmada"].format(servicio=nombre, fecha=fecha),
                         autor=f"humano:{usuario}")
     elif not base.dio_baja(con, c["telefono"]):
@@ -449,7 +442,6 @@ def accion_agendar(con, cfg, c, usuario, form):
 
 
 ESTADOS_CITA = {"agendada": "Agendada", "asistio": "Asistió", "no_asistio": "No asistió", "cancelada": "Cancelada"}
-EXTRAS_FILA_CITA = []  # la etapa 4 agrega el registro de venta
 
 
 def pagina_citas(con, cfg, usuario, q):
@@ -463,11 +455,11 @@ def pagina_citas(con, cfg, usuario, q):
                                       f"name='estado' value='{estado}'><button>{txt}</button></form>")
     rows = "".join(
         f"<tr><td>{e(base.fecha_humana(cfg, base.de_iso(f['inicio'])))}</td><td><a href='{bp}/bandeja/c/{f['contacto_id']}'>"
-        f"{e(f['nombre'] or f['telefono'])}</a></td><td>{e(cfg.servicios.get(f['servicio_id'], {}).get('nombre', f['servicio_id']))}"
+        f"{e(f['nombre'] or f['telefono'])}</a></td><td>{e(cfg.nombre_servicio(f['servicio_id']))}"
         f"</td><td>{ESTADOS_CITA[f['estado']]}</td><td>"
         + (((boton(f["id"], "asistio", "Asistió") + boton(f["id"], "no_asistio", "No asistió")
              if ya_es_el_dia(cfg, f) else "") + boton(f["id"], "cancelada", "Cancelar")) if f["estado"] == "agendada" else "")
-        + "".join(x(con, cfg, f) for x in EXTRAS_FILA_CITA) + "</td></tr>" for f in filas)
+        + ventas.html_venta_en_cita(con, cfg, f) + "</td></tr>" for f in filas)
     error = (q.get("error") or [""])[0]
     return (f"<h1>Citas (ayer a 7 días)</h1>{'<p class=err>' + e(error) + '</p>' if error else ''}"
             f"<table><tr><th>Cuándo</th><th>Cliente</th><th>Servicio</th><th>Estado</th><th></th></tr>{rows}</table>")

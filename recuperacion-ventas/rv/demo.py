@@ -7,12 +7,12 @@ import os
 import tempfile
 import time
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from . import agenda, base, motor, tick, ventas, wa, web
 from .__main__ import payload_falso
 
-RAIZ = Path(__file__).resolve().parent.parent
-EJEMPLO = RAIZ / "ejemplo" / "cliente.json"
+EJEMPLO = base.RAIZ / "ejemplo" / "cliente.json"
 USUARIO, CLAVE = "demo", "demo-ventas-2026"
 
 
@@ -28,7 +28,7 @@ def cliente_de_nicho(nicho, fecha_inicio):
 class Demo:
     def __init__(self, nicho, carpeta, pausa):
         self.nicho, self.pausa = nicho, pausa
-        self.lunes = lunes = primer_lunes(dt.datetime.now(_tz()).date())
+        self.lunes = lunes = primer_lunes(dt.datetime.now(ZoneInfo(base.DEFAULTS["zona_horaria"])).date())
         carpeta.mkdir(parents=True, exist_ok=True)
         (carpeta / "cliente.json").write_text(json.dumps(cliente_de_nicho(nicho, lunes), ensure_ascii=False, indent=2),
                                              encoding="utf-8")
@@ -149,9 +149,6 @@ class Demo:
         return texto
 
 
-def _tz():
-    from zoneinfo import ZoneInfo
-    return ZoneInfo(base.DEFAULTS["zona_horaria"])
 
 
 def primer_lunes(hoy):

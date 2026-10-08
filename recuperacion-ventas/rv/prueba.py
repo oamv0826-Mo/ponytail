@@ -148,11 +148,7 @@ def r_venta(con, cfg, tel, desde):
 
 def r_reporte(con, cfg, tel, desde):
     mes = base.ahora().astimezone(cfg.tz).strftime("%Y-%m")
-    texto = ventas.reporte(con, cfg, mes)
-    carpeta = cfg.carpeta / "reportes"
-    carpeta.mkdir(exist_ok=True)
-    (carpeta / f"reporte-{mes}.md").write_text(texto, encoding="utf-8")
-    print(texto)
+    ventas.guardar_reporte(cfg, mes, ventas.reporte(con, cfg, mes))
     d = ventas.datos_reporte(con, cfg, mes)
     return d["recuperado"] > 0 and d["citas_agendadas"] > 0, (
         f"reporte guardado en reportes/reporte-{mes}.md · recuperado ${d['recuperado'] / 100:,.2f} · "
@@ -165,7 +161,7 @@ def p_conexion(con, cfg, tel):
         return "cliente.json tiene modo_prueba: true. Ponlo en false para la prueba real."
     for nivel, msg in verificar.locales(con, cfg) + verificar.remotos(con, cfg):
         print(f"[{nivel:5}] {msg}")
-    url = cfg["url_publica"].rstrip("/") + "/webhook"
+    url = verificar.url_webhook(cfg)
     if input(f"¿Suscribo la app a tu WABA y apunto el webhook de tu número a {url}? [s/n] ").strip().lower() == "s":
         # requisito de Meta para el override: la app suscrita a la WABA
         print("Meta (subscribed_apps):", json.dumps(wa._graph(cfg, "POST", f"{cfg['whatsapp']['waba_id']}/subscribed_apps")))
@@ -174,7 +170,7 @@ def p_conexion(con, cfg, tel):
 
 
 def r_conexion(con, cfg, tel, desde):
-    esperado = cfg["url_publica"].rstrip("/") + "/webhook"
+    esperado = verificar.url_webhook(cfg)
     conf = wa.graph_get(cfg, f"{cfg['whatsapp']['phone_number_id']}?fields=webhook_configuration")
     (cfg.carpeta / "meta-webhook-configuration.json").write_text(json.dumps(conf, indent=2), encoding="utf-8")
     rutas = [r for r in _rutas(conf) if r[1] == esperado]

@@ -75,7 +75,7 @@ def cmd_tick(cfg, args):
 
 
 def cmd_importar_clientes(cfg, args):
-    with base.db(cfg) as con:
+    with base.db(cfg) as con, base.transaccion(con):
         r = ventas.importar_clientes(con, cfg, args.csv)
     print(f"nuevos={r['nuevos']} actualizados={r['actualizados']} duplicados={r['duplicados']} "
           f"equipo_excluidos={r['equipo']} rechazados={len(r['rechazados'])}")
@@ -84,7 +84,7 @@ def cmd_importar_clientes(cfg, args):
 
 
 def cmd_importar_ventas(cfg, args):
-    with base.db(cfg) as con:
+    with base.db(cfg) as con, base.transaccion(con):
         r = ventas.importar_ventas(con, cfg, args.csv)
     print(f"registradas={r['registradas']} duplicadas={r['duplicadas']} rechazadas={len(r['rechazadas'])}")
     for linea, motivo in r["rechazadas"]:
@@ -98,10 +98,7 @@ def cmd_reporte(cfg, args):
             texto = ventas.reporte(con, cfg, mes, args.resenas_google)
         except ValueError as e:
             sys.exit(str(e))
-    carpeta = cfg.carpeta / "reportes"
-    carpeta.mkdir(exist_ok=True)
-    (carpeta / f"reporte-{mes}.md").write_text(texto, encoding="utf-8")
-    print(texto)
+    ventas.guardar_reporte(cfg, mes, texto)
 
 
 def cmd_pagina(cfg, args):

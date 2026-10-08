@@ -163,3 +163,12 @@ CREATE UNIQUE INDEX venta_por_cita ON venta(cita_id, fecha, monto_centavos) WHER
 -- Pagos a plazos: la misma cita puede tener pagos iguales en días distintos (bases que ya aplicaron la v4 original).
 DROP INDEX IF EXISTS venta_por_cita;
 CREATE UNIQUE INDEX venta_por_cita ON venta(cita_id, fecha, monto_centavos) WHERE cita_id IS NOT NULL;
+
+-- version: 6
+-- Índices para consultas de cada tick, de la bandeja y de cada mensaje (medido con 3k contactos y 100k mensajes):
+-- "¿tiene cita futura?" por contacto (reactivación: 290 ms → 2 ms), último mensaje por contacto en orden de id
+-- (lista de la bandeja cada 10 s: 46 ms → 4 ms), gasto de IA del mes y conteo de eventos por tipo.
+CREATE INDEX cita_contacto ON cita(contacto_id, estado, inicio);
+CREATE INDEX mensaje_contacto_id ON mensaje(contacto_id);
+CREATE INDEX ia_uso_creado ON ia_uso(creado);
+CREATE INDEX evento_tipo ON evento(tipo, creado);

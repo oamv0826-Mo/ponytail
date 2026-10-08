@@ -76,15 +76,10 @@ def historial(con, contacto_id, n):
     return msgs
 
 
-def inicio_mes(cfg, t):
-    l = t.astimezone(cfg.tz)
-    return dt.datetime(l.year, l.month, 1, tzinfo=cfg.tz)
-
-
-def costo_mes_usd(con, cfg, t=None):
-    t = t or base.ahora()
+def costo_mes_usd(con, cfg):
+    l = base.ahora().astimezone(cfg.tz)
     r = con.execute("SELECT COALESCE(SUM(costo_micro_usd),0) FROM ia_uso WHERE creado>=?",
-                    (base.iso(inicio_mes(cfg, t)),)).fetchone()[0]
+                    (base.iso(dt.datetime(l.year, l.month, 1, tzinfo=cfg.tz)),)).fetchone()[0]
     return r / 1_000_000
 
 

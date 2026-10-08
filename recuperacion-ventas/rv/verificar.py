@@ -80,7 +80,7 @@ def remotos(con, cfg):
         r.append(("OK", f"Meta: {n.get('display_phone_number')} · {n.get('verified_name')} · calidad {n.get('quality_rating')}"))
     except Exception as e:
         r.append(("ERROR", f"Meta: no se pudo leer el número: {e}"))
-    esperado = cfg["url_publica"].rstrip("/") + "/webhook"
+    esperado = url_webhook(cfg)
     try:
         # Formato documentado por Meta: {"webhook_configuration": {"phone_number": url, "application": url}}.
         # prueba-real guarda la respuesta real para confirmarlo.
@@ -114,10 +114,13 @@ def remotos(con, cfg):
     return r
 
 
+def url_webhook(cfg):
+    return cfg["url_publica"].rstrip("/") + "/webhook"
+
+
 def configurar_override(cfg):
     """Apunta el webhook del número de este cliente a su URL (paso de instalación)."""
     if cfg["modo_prueba"]:
         raise RuntimeError("en modo prueba no se configura Meta")
-    url = cfg["url_publica"].rstrip("/") + "/webhook"
     return wa._graph(cfg, "POST", cfg["whatsapp"]["phone_number_id"], {
-        "webhook_configuration": {"override_callback_uri": url, "verify_token": os.environ["WA_VERIFY_TOKEN"]}})
+        "webhook_configuration": {"override_callback_uri": url_webhook(cfg), "verify_token": os.environ["WA_VERIFY_TOKEN"]}})

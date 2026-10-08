@@ -79,20 +79,15 @@ def recordatorios(con, cfg, t):
             if f[campo]:
                 continue
             objetivo = inicio - dt.timedelta(hours=horas)
-            if creado >= objetivo or not puede_proactivo(con, cfg, c):
-                # creada dentro del plazo (ya recibió confirmación) o dio de baja: no se manda
+            # creada dentro del plazo (ya recibió confirmación), dio de baja, o el de 2 h cae fuera de la ventana
+            if (creado >= objetivo or not puede_proactivo(con, cfg, c)
+                    or (horas == 2 and not base.en_ventana_envio(cfg, objetivo))):
                 con.execute(f"UPDATE cita SET {campo}='omitido' WHERE id=?", (f["id"],))
                 continue
-            if horas == 24:
-                momento = base.ultimo_momento_envio_antes(cfg, objetivo)
-            else:  # el de 2 h se omite si cae fuera de la ventana de envío
-                momento = objetivo if base.en_ventana_envio(cfg, objetivo) else None
-                if momento is None:
-                    con.execute("UPDATE cita SET rec2='omitido' WHERE id=?", (f["id"],))
-                    continue
+            momento = base.ultimo_momento_envio_antes(cfg, objetivo) if horas == 24 else objetivo
             if momento is None or t < momento:
                 continue
-            servicio = cfg.servicios.get(f["servicio_id"], {}).get("nombre", f["servicio_id"])
+            servicio = cfg.nombre_servicio(f["servicio_id"])
             r = _plantilla(con, cfg, c, "recordatorio_cita",
                            [c["nombre"], servicio, base.fecha_humana(cfg, inicio),
                             cfg.get("direccion", cfg["nombre"]).rstrip(". ")])   # la plantilla ya pone el punto
@@ -148,9 +143,9 @@ def seguimiento(con, cfg, t):
             vence = max(vence, base.de_iso(anterior) + dt.timedelta(days=1))   # nunca dos en el mismo día
         if t < vence:
             continue
-        servicio = cfg.servicios.get(c["seg_servicio"] or "", {}).get("nombre", "nuestros servicios")
-        params = {0: [c["nombre"], servicio], 1: [c["nombre"], cfg["nombre"], servicio], 2: [c["nombre"], servicio]}
-        res = _plantilla(con, cfg, c, f"seguimiento_{paso + 1}", params.get(paso, params[2]))
+        servicio = cfg.nombre_servicio(c["seg_servicio"] or "", "nuestros servicios")
+        params = [c["nombre"], cfg["nombre"], servicio] if paso == 1 else [c["nombre"], servicio]
+        res = _plantilla(con, cfg, c, f"seguimiento_{paso + 1}", params)
         if res == "reintentar":
             continue
         con.execute("UPDATE contacto SET seg_paso=?, seg_activo=? WHERE id=?",
