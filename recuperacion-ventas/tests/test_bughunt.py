@@ -312,3 +312,35 @@ class Ronda7Migraciones(Caso):
                         "VALUES (1, 1, 175000, ?, 'x', 'x', 'x')", (fecha,))
         self.assertEqual(con.execute("SELECT COUNT(*) FROM venta").fetchone()[0], 2)
         con.close()
+
+
+class Ronda8Auditoria(Caso):
+    ENC = ("negocio,envio_habil,respuesta_habil,envio_no_habil,respuesta_no_habil,dio_precio,ofrecio_agendar,"
+           "seguimiento_2d,seguimiento_5d,resenas_google,contesta_resenas,boton_whatsapp,horario_visible,consultas_mes,"
+           "ticket_promedio,notas")
+    FILA = "Clínica Ñandú,2026-10-13 11:00,2026-10-13 11:20,,,sí,no,no,no,40,no,sí,sí,60,3500,"
+
+    def leer(self, texto, encoding="utf-8"):
+        from rv import auditoria
+        ruta = self.dir / "negocios.csv"
+        ruta.write_bytes(texto.encode(encoding))
+        return auditoria.leer(ruta)
+
+    def test_negocios_csv_guardado_de_nuevo_por_excel(self):
+        import datetime as dt
+        variantes = [
+            (self.ENC + "\n" + self.FILA + "\n", "cp1252"),
+            (self.ENC.replace(",", ";") + "\n" + self.FILA.replace(",", ";") + "\n", "utf-8"),
+            (self.ENC + "\n" + self.FILA.replace("2026-10-13 11:00", "13/10/2026 11:00:00")
+             .replace("2026-10-13 11:20", "13/10/2026 11:20:00") + "\n", "utf-8"),
+        ]
+        for texto, encoding in variantes:
+            negocios, errores = self.leer(texto, encoding)
+            self.assertEqual(errores, [])
+            self.assertEqual((negocios[0]["negocio"], negocios[0]["demora_habil"]),
+                             ("Clínica Ñandú", dt.timedelta(minutes=20)))
+
+    def test_sin_columna_negocio_avisa_en_vez_de_quedar_vacio(self):
+        negocios, errores = self.leer("nombre,x\nA,1\n")
+        self.assertEqual(negocios, [])
+        self.assertIn("columna 'negocio'", errores[0][1])

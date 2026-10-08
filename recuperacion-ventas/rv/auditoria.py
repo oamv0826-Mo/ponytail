@@ -42,7 +42,8 @@ def _fecha(s):
     s = (s or "").strip()
     if not s:
         return None
-    for formato in ("%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M"):
+    # Excel en México vuelve a guardar como "13/10/2026 11:00:00" o "13/10/26 11:00"
+    for formato in ("%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S", "%d/%m/%y %H:%M"):
         try:
             return dt.datetime.strptime(s, formato)
         except ValueError:
@@ -75,25 +76,27 @@ def _demora(envio, respuesta):
 def leer(ruta):
     """Devuelve (negocios, errores). Cada negocio: dict con los datos ya interpretados."""
     negocios, errores = [], []
-    with open(ruta, encoding="utf-8-sig", newline="") as f:
-        for linea, fila in enumerate(csv.DictReader(f), start=2):
-            d = {k: (v or "").strip() for k, v in fila.items() if k}
-            if not d.get("negocio") or "(borra esta fila)" in d["negocio"]:
-                continue
-            try:
-                eh, rh = _fecha(d.get("envio_habil")), _fecha(d.get("respuesta_habil"))
-                en, rn = _fecha(d.get("envio_no_habil")), _fecha(d.get("respuesta_no_habil"))
-                negocios.append({
-                    "negocio": d["negocio"], "notas": d.get("notas", ""),
-                    "envio_habil": eh, "demora_habil": _demora(eh, rh),
-                    "envio_no_habil": en, "demora_no_habil": _demora(en, rn),
-                    "precio": _si(d.get("dio_precio")), "agendar": _si(d.get("ofrecio_agendar")),
-                    "seg2": _si(d.get("seguimiento_2d")), "seg5": _si(d.get("seguimiento_5d")),
-                    "resenas": int(_entero(d.get("resenas_google")) or 0), "contesta": _si(d.get("contesta_resenas")),
-                    "boton": _si(d.get("boton_whatsapp")), "horario": _si(d.get("horario_visible")),
-                    "consultas_mes": _entero(d.get("consultas_mes")), "ticket": _entero(d.get("ticket_promedio"))})
-            except ValueError as e:
-                errores.append((linea, f"{d['negocio']}: {e}"))
+    filas = ventas.leer_csv(ruta)   # UTF-8 o Windows-1252, coma o punto y coma (como lo vuelve a guardar Excel)
+    if "negocio" not in [(c or "").strip().lower() for c in (filas.fieldnames or [])]:
+        return [], [(1, f"no encontré la columna 'negocio' en el encabezado: {filas.fieldnames}")]
+    for linea, fila in enumerate(filas, start=2):
+        d = {k.strip().lower(): (v or "").strip() for k, v in fila.items() if k}
+        if not d.get("negocio") or "(borra esta fila)" in d["negocio"]:
+            continue
+        try:
+            eh, rh = _fecha(d.get("envio_habil")), _fecha(d.get("respuesta_habil"))
+            en, rn = _fecha(d.get("envio_no_habil")), _fecha(d.get("respuesta_no_habil"))
+            negocios.append({
+                "negocio": d["negocio"], "notas": d.get("notas", ""),
+                "envio_habil": eh, "demora_habil": _demora(eh, rh),
+                "envio_no_habil": en, "demora_no_habil": _demora(en, rn),
+                "precio": _si(d.get("dio_precio")), "agendar": _si(d.get("ofrecio_agendar")),
+                "seg2": _si(d.get("seguimiento_2d")), "seg5": _si(d.get("seguimiento_5d")),
+                "resenas": int(_entero(d.get("resenas_google")) or 0), "contesta": _si(d.get("contesta_resenas")),
+                "boton": _si(d.get("boton_whatsapp")), "horario": _si(d.get("horario_visible")),
+                "consultas_mes": _entero(d.get("consultas_mes")), "ticket": _entero(d.get("ticket_promedio"))})
+        except ValueError as e:
+            errores.append((linea, f"{d['negocio']}: {e}"))
     return negocios, errores
 
 

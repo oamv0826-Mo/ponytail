@@ -160,3 +160,4 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - Teléfonos: 044/045 + 10 dígitos y 01 + 10 dígitos (marcación antigua) se convierten a +52 + 10; un número nacional con 0 inicial se rechaza.
 - Migraciones bajo candado de archivo (`fcntl`, Linux) para que dos procesos que arrancan juntos no apliquen la misma migración.
 - Venta duplicada con cita = misma cita, fecha y monto (antes sin fecha): los pagos a plazos iguales en días distintos son ventas distintas. Se ajustó la sección v4 del esquema, que aún no estaba en ninguna instalación real, y la v5 corrige las bases de prueba que ya la tenían.
+- La auditoría lee `negocios.csv` con el mismo lector que las importaciones (Excel en Windows, punto y coma) y acepta fechas con segundos; si no encuentra la columna `negocio` lo dice en vez de devolver una lista vacía.

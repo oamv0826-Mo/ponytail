@@ -1,6 +1,6 @@
 # Ciclo autónomo de caza de errores
 
-Estado: rondas = 7 · rondas seguidas sin hallazgos = 0 · se detiene con 2 limpias seguidas o al llegar a 8.
+Estado: TERMINADO · 8 rondas (límite alcanzado) · ninguna ronda salió limpia: 24 errores corregidos, cada uno con prueba.
 
 Orden de áreas: 1 motor/guardrails IA · 2 agenda/Google · 3 tick/ventanas · 4 ventas/atribución/reporte ·
 5 bandeja/seguridad · 6 CSV/teléfonos · 7 migraciones/respaldo/caídas · 8 kit (auditoria, demo, prueba) ·
@@ -70,3 +70,27 @@ Prueba existente actualizada: `test_e4.Atribucion.test_importar_ventas` usaba "0
 | 2 | Regresión de la ronda 4: dos pagos iguales de la misma cita en días distintos (pago a plazos) se rechazaban como duplicado; además, una base con esos datos haría fallar la migración v4. | Duplicado con cita = misma cita, fecha y monto. Esquema v5 corrige las bases que ya tenían la v4; la v4 se ajustó (nunca llegó a producción). | `test_pagos_a_plazos_de_la_misma_cita`, `test_base_con_la_v4_original_se_corrige_con_la_v5` |
 
 Revisado sin hallazgos: respaldo consistente con temporal único, restauración, rollback de migración fallida, retoma de entradas a medias tras caída (ronda de revisión anterior).
+
+## Ronda 8 · kit (auditoría, demo, prueba real)
+| # | Hallazgo (reproducido) | Corrección | Prueba |
+|---|---|---|---|
+| 1 | `negocios.csv` vuelto a guardar desde Excel en Windows (Windows-1252) hacía tronar la auditoría. | La auditoría usa el mismo lector robusto de la ronda 6. | `test_negocios_csv_guardado_de_nuevo_por_excel` |
+| 2 | Guardado con punto y coma: la auditoría devolvía **0 negocios y 0 errores** (pérdida silenciosa de todo el trabajo). | Separador detectado; si falta la columna `negocio`, error explícito en vez de quedar vacío. | (misma prueba) y `test_sin_columna_negocio_avisa_en_vez_de_quedar_vacio` |
+| 3 | Excel reformatea las fechas a "13/10/2026 11:00:00": cada negocio se rechazaba por fecha inválida. | Se aceptan también fechas con segundos y año de dos dígitos. | (misma prueba) |
+
+Revisado sin hallazgos: `demo-ventas` de punta a punta. `prueba-real` solo se revisó por lectura (necesita cuentas reales de Meta, Anthropic y Google; no se ejecutó).
+
+## Resumen
+| Ronda | Área | Errores corregidos |
+|---|---|---|
+| 1 | Motor y guardrails IA | 4 |
+| 2 | Agenda y Google Calendar | 2 |
+| 3 | Tick y ventanas de envío | 3 |
+| 4 | Ventas, atribución y reporte | 3 |
+| 5 | Bandeja web y seguridad | 2 |
+| 6 | Importaciones CSV y teléfonos | 5 |
+| 7 | Migraciones y respaldo | 2 (una era regresión de la ronda 4) |
+| 8 | Kit de venta | 3 |
+| **Total** | | **24** |
+
+Pendiente para un siguiente ciclo: simulaciones adversariales de punta a punta (mensajes raros, concurrencia entre `serve` y `tick`, cambios de día a medianoche) y la prueba real con cuentas.
