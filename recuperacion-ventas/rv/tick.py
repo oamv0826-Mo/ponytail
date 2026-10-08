@@ -20,7 +20,7 @@ def _plantilla(con, cfg, c, nombre, params):
     ponytail: si Meta aceptó el envío pero la respuesta se perdió (timeout), el reintento puede duplicarlo;
     es preferible a no enviar un recordatorio."""
     if wa.enviar(con, cfg, c["telefono"], plantilla=nombre, params=params, contacto_id=c["id"],
-                 autor="sistema", destino=c["wa_id"])[1]:
+                 autor="sistema")[1]:
         return "ok"
     fallas = con.execute("SELECT COUNT(*) FROM mensaje WHERE contacto_id=? AND plantilla=? AND estado='error' "
                          "AND creado>?", (c["id"], nombre, base.iso(base.ahora() - dt.timedelta(hours=24)))).fetchone()[0]
@@ -67,12 +67,12 @@ def recordatorios(con, cfg, t):
     n = 0
     if not base.en_ventana_envio(cfg, t):
         return 0
-    filas = con.execute("SELECT ci.*, co.telefono, co.wa_id, co.nombre FROM cita ci JOIN contacto co "
+    filas = con.execute("SELECT ci.*, co.telefono, co.nombre FROM cita ci JOIN contacto co "
                         "ON co.id=ci.contacto_id WHERE ci.estado='agendada' AND ci.inicio>? AND "
                         "(ci.rec24 IS NULL OR ci.rec2 IS NULL)", (base.iso(t),)).fetchall()
     for f in filas:
         inicio, creado = base.de_iso(f["inicio"]), base.de_iso(f["creado"])
-        c = {"id": f["contacto_id"], "telefono": f["telefono"], "wa_id": f["wa_id"], "nombre": f["nombre"]}
+        c = {"id": f["contacto_id"], "telefono": f["telefono"], "nombre": f["nombre"]}
         for campo, horas in (("rec24", 24), ("rec2", 2)):
             if f[campo]:
                 continue

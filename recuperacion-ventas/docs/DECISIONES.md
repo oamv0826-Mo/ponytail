@@ -12,7 +12,7 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 
 ## Mensajería
 - Teléfonos en E.164; `521` + 10 dígitos (móvil México, formato antiguo) se normaliza a `+52` + 10: un mismo cliente no queda duplicado.
-- Para responder se usa el `wa_id` exacto que mandó Meta: es la dirección que Meta garantiza válida.
+- Para responder se usa el teléfono normalizado (`52` + 10), no el `wa_id`: en México Meta manda `521` + 10, pero la lista de destinatarios del número de prueba y la marcación actual son `52` + 10, y responder al `521` falla con 131030. Los contactos importados ya se escribían así.
 - Palabras de baja: coincide el mensaje completo normalizado (sin acentos, mayúsculas ni puntuación), no una subcadena: "ya no me duele" no debe dar de baja a nadie.
 - Urgencia y handoff: coincidencia por palabra/frase dentro del mensaje normalizado: es mejor pasar de más a humano que de menos.
 - Un contacto con opt-out que vuelve a escribir sí recibe respuesta: el opt-out bloquea todo envío proactivo (seguimiento, reactivación, reseñas, recordatorios), no la atención que el cliente mismo pide.
@@ -146,3 +146,6 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - Baja por frase: además de las palabras exactas, frases inequívocas dentro del mensaje ("darme de baja", "no me manden", "no me envíen"…) registran el opt-out. Un falso positivo solo apaga los envíos proactivos; el cliente sigue recibiendo respuestas si escribe.
 - Reacciones (👍) no se contestan ni pasan a humano.
 - Archivos del cliente: se guarda el id de Meta (esquema v3) y la bandeja los pide a Meta en el momento (la URL de descarga dura minutos; Meta los conserva ~30 días). Máximo 25 MB. Solo se muestran en línea imagen/audio/video/PDF comunes; lo demás se descarga.
+## Encontrado en la revisión de errores del núcleo (2026-10-08)
+- Envíos a `52` + 10 en vez del `wa_id` con `521` (ver Mensajería). Prueba: `MovilMexicoSinUno`.
+- El servidor rechaza con 413 un `Content-Length` negativo: antes `read(-1)` leía sin límite hasta que el cliente cerraba la conexión. Prueba: `CuerpoConLargoNegativo`.

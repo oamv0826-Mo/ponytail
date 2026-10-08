@@ -132,11 +132,11 @@ def _limpiar_param(p):
 
 
 def enviar(con, cfg, telefono, *, texto=None, plantilla=None, params=(), contacto_id=None,
-           autor="bot", destino=None):
+           autor="bot"):
     """Envía texto libre o plantilla. Guarda el mensaje; devuelve (mensaje_id, ok).
 
-    destino: wa_id exacto de Meta si se conoce; si no, el teléfono E.164 sin '+'.
-    """
+    Siempre al teléfono E.164 sin '+', no al wa_id: en México Meta manda 521 + 10 dígitos, pero la lista de
+    destinatarios del número de prueba y la marcación actual son 52 + 10 (con 521 falla con 131030)."""
     params = [_limpiar_param(p) for p in params]
     mostrado = texto if texto is not None else texto_plantilla(plantilla, params)
     cur = con.execute(
@@ -151,7 +151,7 @@ def enviar(con, cfg, telefono, *, texto=None, plantilla=None, params=(), contact
         with open(cfg.carpeta / "envios-prueba.log", "a", encoding="utf-8") as f:
             f.write(f"{base.iso(base.ahora())}\t{telefono}\t{autor}\t{mostrado}\n")
         return mid, True
-    cuerpo = {"messaging_product": "whatsapp", "to": destino or telefono.lstrip("+")}
+    cuerpo = {"messaging_product": "whatsapp", "to": telefono.lstrip("+")}
     if texto is not None:
         cuerpo |= {"type": "text", "text": {"body": texto, "preview_url": False}}
     else:

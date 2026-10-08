@@ -169,7 +169,8 @@ Todos usan plantillas aprobadas por Meta ([plantillas.md](plantillas.md)) y resp
 ### 2.8 Teléfonos
 
 Se guardan en E.164 (`+52` + 10 dígitos para México). `521XXXXXXXXXX` (formato antiguo de móvil) se
-normaliza a `+52XXXXXXXXXX`. Para responder se usa el `wa_id` tal como llegó de Meta.
+normaliza a `+52XXXXXXXXXX`. Para responder se usa ese mismo número normalizado (no el `wa_id` con `521`, que
+falla con el número de prueba de Meta).
 
 ## 3. Datos
 
