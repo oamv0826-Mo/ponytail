@@ -38,7 +38,7 @@ def contacto(con, cid):
 
 
 def responder(con, cfg, c, texto, autor="bot"):
-    return wa.enviar(con, cfg, c["telefono"], texto=texto, contacto_id=c["id"], autor=autor, destino=c["wa_id"])
+    return wa.enviar(con, cfg, c["telefono"], texto=texto, contacto_id=c["id"], autor=autor)
 
 
 def link_bandeja(cfg, cid):

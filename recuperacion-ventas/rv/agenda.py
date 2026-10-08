@@ -405,7 +405,7 @@ def accion_agendar(con, cfg, c, usuario, form):
                         autor=f"humano:{usuario}")
     elif not base.dio_baja(con, c["telefono"]):
         wa.enviar(con, cfg, c["telefono"], plantilla="cita_confirmada", params=[c["nombre"], nombre, cfg["nombre"], fecha],
-                  contacto_id=c["id"], autor=f"humano:{usuario}", destino=c["wa_id"])
+                  contacto_id=c["id"], autor=f"humano:{usuario}")
     return None
 
 

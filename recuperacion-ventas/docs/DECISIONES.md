@@ -12,7 +12,7 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 
 ## Mensajería
 - Teléfonos en E.164; `521` + 10 dígitos (móvil México, formato antiguo) se normaliza a `+52` + 10: un mismo cliente no queda duplicado.
-- Para responder se usa el `wa_id` exacto que mandó Meta: es la dirección que Meta garantiza válida.
+- Para responder se usa el teléfono normalizado (`52` + 10), no el `wa_id`: en México Meta manda `521` + 10, pero la lista de destinatarios del número de prueba y la marcación actual son `52` + 10, y responder al `521` falla con 131030. Los contactos importados ya se escribían así.
 - Palabras de baja: coincide el mensaje completo normalizado (sin acentos, mayúsculas ni puntuación), no una subcadena: "ya no me duele" no debe dar de baja a nadie.
 - Urgencia y handoff: coincidencia por palabra/frase dentro del mensaje normalizado: es mejor pasar de más a humano que de menos.
 - Un contacto con opt-out que vuelve a escribir sí recibe respuesta: el opt-out bloquea todo envío proactivo (seguimiento, reactivación, reseñas, recordatorios), no la atención que el cliente mismo pide.
@@ -141,3 +141,7 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 ## Encontrado en la simulación de punta a punta
 - Seguimiento: "responde" se interpreta como responder a un mensaje de seguimiento ya enviado. Antes, cualquier mensaje después de pedir precio (p. ej. "ok gracias, lo pienso") cancelaba la secuencia antes del primer envío, justo en el caso central del documento ("piden precio, dicen 'lo pienso' y desaparecen"). Ahora esos mensajes solo recorren el conteo de días al último mensaje.
 - La IA simulada (solo modo prueba) responde con cortesía a "gracias / lo pienso" y pasa a humano las preguntas de salud en vez de pasar a humano, como lo haría la IA real; así la demo refleja el flujo real.
+
+## Encontrado en la revisión de errores del núcleo (2026-10-08)
+- Envíos a `52` + 10 en vez del `wa_id` con `521` (ver Mensajería). Prueba: `MovilMexicoSinUno`.
+- El servidor rechaza con 413 un `Content-Length` negativo: antes `read(-1)` leía sin límite hasta que el cliente cerraba la conexión. Prueba: `CuerpoConLargoNegativo`.

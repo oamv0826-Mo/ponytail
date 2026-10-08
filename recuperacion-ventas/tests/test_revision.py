@@ -195,5 +195,31 @@ class Varios(Caso):
         self.assertEqual(list((self.dir / "r").glob("tmp-*")), [])
 
 
+class MovilMexicoSinUno(Caso):
+    def test_responde_al_52_mas_10_aunque_meta_mande_el_wa_id_con_521(self):
+        # Meta manda los móviles de México como 521 + 10 dígitos, pero la lista de destinatarios del número de
+        # prueba (y la marcación actual) es 52 + 10: responder al wa_id con 521 falla con 131030.
+        self.cfg["modo_prueba"] = False
+        self.cfg["whatsapp"]["phone_number_id"] = "123"
+        c = {"id": None, "telefono": "+528100000001", "wa_id": "5218100000001"}
+        with mock.patch.object(wa, "_graph", return_value={"messages": [{"id": "wamid.x"}]}) as g:
+            motor.responder(self.con, self.cfg, c, "hola")
+        self.assertEqual(g.call_args[0][3]["to"], "528100000001")
+
+
+class CuerpoConLargoNegativo(Caso):
+    def test_content_length_negativo_se_rechaza_sin_leer_hasta_el_final(self):
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            puerto = s.getsockname()[1]
+        srv = web.crear_servidor(self.cfg, puerto=puerto)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        with socket.create_connection(("127.0.0.1", puerto), timeout=3) as s:
+            s.sendall(b"POST /webhook HTTP/1.1\r\nHost: x\r\nContent-Length: -1\r\n\r\n")
+            self.assertIn(b" 413 ", s.recv(100))
+
+
 if __name__ == "__main__":
     unittest.main()

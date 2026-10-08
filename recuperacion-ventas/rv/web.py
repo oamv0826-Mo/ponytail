@@ -239,7 +239,7 @@ def accion_conversacion(con, cfg, c, usuario, nombre, form):
         if not base.en_ventana_envio(cfg, base.ahora()):
             return "Fuera del horario de envío (9:00 a 20:00, lunes a sábado)."
         wa.enviar(con, cfg, c["telefono"], plantilla="retomar_contacto", params=[c["nombre"], cfg["nombre"]],
-                  contacto_id=cid, autor=f"humano:{usuario}", destino=c["wa_id"])
+                  contacto_id=cid, autor=f"humano:{usuario}")
     elif nombre in ACCIONES_EXTRA:
         return ACCIONES_EXTRA[nombre](con, cfg, c, usuario, form)
     else:
@@ -294,7 +294,7 @@ def crear_servidor(cfg, host="127.0.0.1", puerto=None):
 
         def leer(self, maximo):
             n = int(self.headers.get("Content-Length") or 0)
-            if n > maximo:
+            if not 0 <= n <= maximo:   # -1 haría que read() lea hasta que el cliente cierre
                 raise ValueError("cuerpo demasiado grande")
             return self.rfile.read(n)
 
