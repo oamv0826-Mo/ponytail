@@ -56,6 +56,10 @@ class VerificarRemoto(Caso):
                 return {"webhook_configuration": {"phone_number": url, "application": "https://app"}, "id": "111"}
             if ruta.startswith("111?"):
                 return {"display_phone_number": "+52 81 1000 0000", "verified_name": "Demo", "quality_rating": "GREEN"}
+            if ruta.startswith("debug_token"):
+                return {"data": {"is_valid": True, "expires_at": 0, "scopes": sorted(verificar.PERMISOS_WA)}}
+            if ruta == "222/subscribed_apps":
+                return {"data": [{"whatsapp_business_api_data": {"id": "999"}}]}
             if ruta.startswith("222/message_templates"):
                 return {"data": [{"name": n, "language": "es_MX", "status": "APPROVED"}
                                  for n in verificar.PLANTILLAS if n != falta]}
@@ -74,6 +78,14 @@ class VerificarRemoto(Caso):
             errores = [m for n, m in verificar.remotos(self.con, self.cfg) if n == "ERROR"]
         self.assertTrue(any("NO configurado" in m for m in errores))
         self.assertIn("plantilla resena (es_MX): no existe", errores)
+
+    def test_token_de_meta(self):
+        bien = {"is_valid": True, "scopes": sorted(verificar.PERMISOS_WA)}
+        self.assertEqual(verificar.token_meta(bien | {"expires_at": 0})[0], "OK")
+        self.assertEqual(verificar.token_meta(bien | {"expires_at": base.ahora().timestamp() + 30 * 86400})[0], "OK")
+        self.assertEqual(verificar.token_meta(bien | {"expires_at": base.ahora().timestamp() + 3600})[0], "ERROR")
+        self.assertIn("faltan permisos", verificar.token_meta(bien | {"scopes": ["whatsapp_business_messaging"]})[1])
+        self.assertEqual(verificar.token_meta({"is_valid": False})[0], "ERROR")
 
     def test_configurar_override_manda_url_y_token(self):
         os.environ["WA_VERIFY_TOKEN"] = "tok"

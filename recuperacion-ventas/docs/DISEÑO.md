@@ -214,3 +214,28 @@ igual que Meta. Sin `ANTHROPIC_API_KEY` usa la IA simulada; con `agenda.proveedo
 | E5 | despliegue (systemd, Caddy, rclone), `verificar`, runbook, checklist de instalación |
 
 Pruebas: `cd recuperacion-ventas && python3 -m unittest discover -s tests -v`.
+
+## 7. Integraciones externas
+
+Cada integración respeta `modo_prueba` (registra en vez de llamar) y tiene pruebas con respuestas falsas; `verificar --remoto`
+revisa cada una con llamadas de solo lectura. La verificación contra la documentación oficial se hizo con búsqueda web porque
+la red de la sesión de desarrollo bloquea los sitios de documentación; cada fila cita la página revisada.
+
+### 7.1 WhatsApp Cloud API y Google Calendar (fase 1: auditoría)
+
+| Qué usa el código | Dónde | Resultado | Documentación |
+|---|---|---|---|
+| Graph API `v23.0` (configurable en `whatsapp.graph_version`) | `wa._graph` | Vigente (salió el 29/5/2025, sin fecha de fin; Meta retira una versión ~2 años después de la siguiente) | [changelog de versiones](https://developers.facebook.com/docs/graph-api/changelog/versions) |
+| `POST /{phone_number_id}/messages`: texto (`text.body`, `preview_url`) y plantilla (`template.name`, `language.code`, `components[body].parameters[text]` en orden) | `wa.enviar` | Coincide | [plantillas](https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/overview.md) |
+| Override por número: `POST /{phone_number_id}` con `webhook_configuration.override_callback_uri` (≤200 caracteres) y `verify_token`; lectura con `?fields=webhook_configuration` → `phone_number` / `whatsapp_business_account` / `application`; requisito: la app suscrita a la WABA | `verificar.configurar_override`, `remotos` | Coincide; se agregó el chequeo de `/{waba_id}/subscribed_apps` | [webhook overrides](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/override/) |
+| `GET /debug_token?input_token=` → `is_valid`, `expires_at` (0 = no vence), `scopes` | `verificar.token_meta` | Nuevo: avisa si el token vence en menos de 14 días o le faltan `whatsapp_business_messaging` / `whatsapp_business_management` | [debug_token](https://developers.facebook.com/docs/graph-api/reference/debug_token/) |
+| Firma `X-Hub-Signature-256: sha256=HMAC(app_secret, cuerpo)`, verificación `hub.mode/hub.verify_token/hub.challenge` | `wa.firma_valida`, `web` | Coincide | [webhooks](https://developers.facebook.com/docs/graph-api/webhooks/getting-started) |
+| Media: `GET /{media_id}` → `url`, `mime_type`; descarga con el mismo token (la URL vence en minutos) | `wa.descargar_media` | Coincide | [media](https://developers.facebook.com/docs/whatsapp/cloud-api/reference/media) |
+| Cuenta de servicio: JWT RS256 (`iss`, `scope`, `aud=token_uri`, `exp ≤ 1 h`) → `token_uri` | `agenda._token_google` | Coincide | [OAuth para servidores](https://developers.google.com/identity/protocols/oauth2/service-account) |
+| `POST /calendar/v3/freeBusy` (`timeMin`, `timeMax`, `items[].id`); errores por calendario (`notFound` = no compartido) | `agenda.ocupado_google` | Coincide: un error por calendario ya cuenta como falla | [freebusy.query](https://developers.google.com/workspace/calendar/v3/reference/freebusy/query) |
+| `POST calendars/{id}/events`, `DELETE …/events/{id}` (404/410 = ya no existe) | `agenda` | Coincide | [events](https://developers.google.com/workspace/calendar/v3/reference/events) |
+
+`verificar --remoto` ahora reporta por separado: versión de Graph, número y calidad, token (validez, vencimiento, permisos),
+suscripción de la app a la WABA, override del webhook, cada plantilla, clave de Anthropic y lectura del calendario (con el
+correo de la cuenta de servicio con el que hay que compartirlo). La escritura en el calendario se prueba en `prueba-real`
+(crear un evento de prueba en el calendario del negocio desde `verificar` sería intrusivo).

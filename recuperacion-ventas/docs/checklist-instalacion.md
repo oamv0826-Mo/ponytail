@@ -37,7 +37,7 @@ Paso a paso de cada cuenta, con costo y tiempo: [arranque-cuentas.md](arranque-c
 - [ ] `pagina` y probar el botón de WhatsApp en un celular.
 
 ## Semana 2–3: salida a producción
-- [ ] Plantillas aprobadas: `verificar --remoto` sin ERROR en plantillas.
+- [ ] Plantillas aprobadas y `verificar --remoto` sin ERROR: token (no vence, con permisos de WhatsApp), app suscrita a la WABA, plantillas, calendario.
 - [ ] `modo_prueba: false` y `systemctl restart rv@<id>`.
 - [ ] `configurar-webhook` (override del número → `url_publica/webhook`); `verificar --remoto` debe marcar OK el override.
 - [ ] Prueba real desde tu celular: precio, cita (aparece en Google Calendar), urgencia, handoff (llega el aviso al equipo).

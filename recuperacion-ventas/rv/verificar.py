@@ -69,17 +69,46 @@ def _anthropic_modelo(cfg):
         return json.loads(r.read())
 
 
+PERMISOS_WA = {"whatsapp_business_messaging", "whatsapp_business_management"}
+
+
+def token_meta(d):
+    """Resultado de GET /debug_token → (nivel, mensaje). expires_at 0 = no vence (token de usuario del sistema)."""
+    if not d.get("is_valid"):
+        return "ERROR", f"token de Meta inválido o revocado: {d.get('error', {}).get('message', 'sin detalle')}"
+    faltan = PERMISOS_WA - set(d.get("scopes", []))
+    if faltan:
+        return "ERROR", "al token de Meta le faltan permisos: " + ", ".join(sorted(faltan))
+    vence = d.get("expires_at") or 0
+    if not vence:
+        return "OK", "token de Meta válido, no vence"
+    dias = (vence - base.ahora().timestamp()) / 86400
+    return ("OK" if dias > 14 else "ERROR"), (f"token de Meta vence en {dias:.0f} días: usa un token de usuario del "
+                                              "sistema (no vence) para producción")
+
+
 def remotos(con, cfg):
     """Llamadas de solo lectura (no envían mensajes ni cuestan): Meta, Anthropic (Models API) y Google freeBusy."""
     r = []
     if cfg["modo_prueba"]:
         return [("AVISO", "modo prueba: chequeos remotos omitidos")]
     w = cfg["whatsapp"]
+    r.append(("OK", f"Meta: Graph API {w['graph_version']}"))
     try:
         n = wa.graph_get(cfg, f"{w['phone_number_id']}?fields=display_phone_number,verified_name,quality_rating")
         r.append(("OK", f"Meta: {n.get('display_phone_number')} · {n.get('verified_name')} · calidad {n.get('quality_rating')}"))
     except Exception as e:
         r.append(("ERROR", f"Meta: no se pudo leer el número: {e}"))
+    try:
+        r.append(token_meta(wa.graph_get(cfg, "debug_token?input_token=" + os.environ.get("WA_TOKEN", "")).get("data", {})))
+    except Exception as e:
+        r.append(("AVISO", f"token de Meta: no se pudo revisar ({e})"))
+    try:
+        apps = wa.graph_get(cfg, f"{w['waba_id']}/subscribed_apps").get("data", [])
+        r.append(("OK" if apps else "ERROR", "app suscrita a la WABA" if apps else
+                  "ninguna app suscrita a la WABA: sin esto Meta no manda webhooks (prueba-real lo configura)"))
+    except Exception as e:
+        r.append(("ERROR", f"suscripción de la app a la WABA: {e}"))
     esperado = url_webhook(cfg)
     try:
         # Formato documentado por Meta: {"webhook_configuration": {"phone_number": url, "application": url}}.
@@ -108,14 +137,23 @@ def remotos(con, cfg):
     if cfg["agenda"]["proveedor"] == "google":
         try:
             agenda.ocupado_google(cfg, base.ahora(), base.ahora() + dt.timedelta(days=1))
-            r.append(("OK", "Google Calendar: acceso al calendario"))
+            r.append(("OK", "Google Calendar: lectura de disponibilidad (freeBusy)"))
         except Exception as e:
-            r.append(("ERROR", f"Google Calendar: {e} (¿se compartió el calendario con la cuenta de servicio?)"))
+            r.append(("ERROR", f"Google Calendar: {e} (comparte el calendario con {_correo_cuenta_servicio()} "
+                               "con permiso «Hacer cambios en eventos»)"))
     return r
 
 
 def url_webhook(cfg):
     return cfg["url_publica"].rstrip("/") + "/webhook"
+
+
+def _correo_cuenta_servicio():
+    try:
+        with open(os.environ.get("GOOGLE_SA_FILE", ""), encoding="utf-8") as f:
+            return json.load(f)["client_email"]
+    except (OSError, ValueError, KeyError):
+        return "la cuenta de servicio"
 
 
 def configurar_override(cfg):
