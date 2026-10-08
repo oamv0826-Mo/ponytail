@@ -12,6 +12,9 @@ mkdir -p /tmp/demo && cp ejemplo/cliente.json /tmp/demo/
 # conversación por consola (ningún mensaje sale a Meta; todo queda en /tmp/demo/envios-prueba.log)
 python3 -m rv --cliente /tmp/demo simular --interactivo
 
+# historia completa de una clienta (noche → seguimiento → cita → recordatorio → humano → venta → reseña → reporte)
+python3 ejemplo/historia.py
+
 # bandeja web
 python3 -m rv --cliente /tmp/demo usuario ana          # pide contraseña (mín. 10)
 python3 -m rv --cliente /tmp/demo serve                # http://127.0.0.1:8080/bandeja

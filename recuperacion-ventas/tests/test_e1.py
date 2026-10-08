@@ -13,6 +13,16 @@ from rv import base, ia, motor, wa, web
 from rv.__main__ import payload_falso
 
 
+class TextoDePlantillas(unittest.TestCase):
+    def test_se_arma_desde_docs_plantillas(self):
+        self.assertEqual(wa.texto_plantilla("reactivacion", ["Ana", "Clínica X"]),
+                         "Hola Ana, en Clínica X queremos saber cómo estás. Ya es buen momento para tu siguiente visita. "
+                         "¿Te ayudamos a agendar? Responde a este mensaje. Si no deseas recibir más mensajes, responde BAJA.")
+        from rv import verificar
+        for nombre in verificar.PLANTILLAS:          # las 9 plantillas existen en el documento
+            self.assertFalse(wa.texto_plantilla(nombre, ["x"] * 4).startswith("["), nombre)
+
+
 class Telefonos(unittest.TestCase):
     def test_normalizacion(self):
         n = base.normalizar_tel
@@ -174,7 +184,7 @@ class IA(Caso):
             s1 = self.escribir("hola", de="+528100000201")
             s2 = self.escribir("hola", de="+528100000202")
         llamada.assert_not_called()
-        sistema = lambda s: [m["telefono"] for m in s if "| el sistema |" in m["texto"]]  # noqa: E731
+        sistema = lambda s: [m["telefono"] for m in s if "con el sistema necesita" in m["texto"]]  # noqa: E731
         self.assertEqual(sistema(s1), ["+528111111111"])   # aviso del tope: solo al dueño, una vez al mes
         self.assertEqual(sistema(s2), [])
         self.assertEqual(self.contacto("+528100000202")["handoff_motivo"], "tope_ia")

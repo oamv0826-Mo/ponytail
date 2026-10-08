@@ -77,6 +77,22 @@ def graph_get(cfg, ruta):
     return _graph(cfg, "GET", ruta)
 
 
+_PLANTILLAS = None
+
+
+def texto_plantilla(nombre, params):
+    """Texto que recibe el cliente, armado desde docs/plantillas.md (única fuente de los textos)."""
+    global _PLANTILLAS
+    if _PLANTILLAS is None:
+        doc = (base.RAIZ / "docs" / "plantillas.md").read_text(encoding="utf-8")
+        _PLANTILLAS = dict(re.findall(r"^### (\w+) \([^)]*\)\n```\n(.*?)\n```", doc, re.M | re.S))
+    t = _PLANTILLAS.get(nombre)
+    if t is None:
+        return f"[{nombre}] " + " | ".join(params)
+    return re.sub(r"\{\{(\d+)\}\}", lambda m: params[int(m.group(1)) - 1] if int(m.group(1)) <= len(params)
+                  else m.group(0), t)
+
+
 def _limpiar_param(p):
     # Meta: sin saltos de línea/tabs ni más de 4 espacios seguidos, y no vacío.
     return re.sub(r"\s+", " ", str(p)).strip() or "cliente"
@@ -89,7 +105,7 @@ def enviar(con, cfg, telefono, *, texto=None, plantilla=None, params=(), contact
     destino: wa_id exacto de Meta si se conoce; si no, el teléfono E.164 sin '+'.
     """
     params = [_limpiar_param(p) for p in params]
-    mostrado = texto if texto is not None else f"[{plantilla}] " + " | ".join(params)
+    mostrado = texto if texto is not None else texto_plantilla(plantilla, params)
     cur = con.execute(
         "INSERT INTO mensaje (contacto_id, telefono, direccion, tipo, texto, plantilla, autor, estado, creado) "
         "VALUES (?,?,?,?,?,?,?,?,?)",

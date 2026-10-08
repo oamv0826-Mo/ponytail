@@ -247,7 +247,7 @@ def reporte(con, cfg, mes, resenas_google=None):
     titulo = f"{base.MESES_ES[a.month - 1].capitalize()} {a.year}"
     filas_ventas = "\n".join(f"| {NOMBRES_ORIGEN.get(o, o)} | {n} | {_pesos(s or 0)} |"
                              for o, (n, s) in sorted(d["ventas"].items(), key=lambda x: NOMBRES_ORIGEN.get(x[0], x[0])))
-    resenas = f"{d['resenas']} solicitudes enviadas" + (f"; reseñas nuevas en Google: {resenas_google}"
+    resenas = f"{d['resenas']} {'solicitud enviada' if d['resenas'] == 1 else 'solicitudes enviadas'}" + (f"; reseñas nuevas en Google: {resenas_google}"
                                                          if resenas_google is not None else "")
     motivos = "\n".join(f"- {k}: {n}" for k, n in d["motivos_handoff"]) or "- ninguno"
     g = d["garantia"]

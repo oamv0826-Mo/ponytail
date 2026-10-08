@@ -231,6 +231,10 @@ def simulada(cfg, texto):
         clave = {w for w in base.normalizar_texto(f["pregunta"]).split() if len(w) > 3}
         if len(clave & set(t.split())) >= 2 or (len(clave) == 1 and clave <= set(t.split())):
             return r("responder", f["respuesta"], "info")
+    if any(w in t for w in ("tomo", "tomar", "medicamento", "pastilla", "duele", "dolor", "sensibilidad", "receta")):
+        return r("humano", motivo="pregunta de salud")
+    if any(f" {w} " in f" {t} " for w in ("gracias", "lo pienso", "lo voy a pensar", "despues te aviso")):
+        return r("responder", "¡Con gusto! Si tienes otra duda o quieres agendar, aquí estoy.")
     if t.split()[:1] in (["hola"], ["buenas"], ["buen"], ["buenos"]):
         return r("responder", f"¡Hola! Soy el asistente de {cfg['nombre']}. ¿En qué te puedo ayudar?")
     return r("humano", motivo="la IA simulada no sabe responder")

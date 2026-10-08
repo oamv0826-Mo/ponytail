@@ -91,7 +91,7 @@ class Reporte(Caso):
         self.assertIn("| 1. Consultas recibidas | **2** (1 fuera de horario) |", texto)
         self.assertIn("| 3. Citas agendadas | **1**", texto)
         self.assertIn("| 4. Ventas recuperadas | **$4,000.00 MXN** en 1 venta |", texto)
-        self.assertIn("1 solicitudes enviadas; reseñas nuevas en Google: 3", texto)
+        self.assertIn("1 solicitud enviada; reseñas nuevas en Google: 3", texto)
         self.assertIn("Respuesta rápida (no cuenta) | 1 | $800.00 MXN", texto)
         self.assertIn("EN CURSO: $4,000.00 MXN de $6,000.00 MXN; el periodo termina el 2026-11-29", texto)
 

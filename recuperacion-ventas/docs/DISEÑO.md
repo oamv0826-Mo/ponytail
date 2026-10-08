@@ -142,7 +142,7 @@ Todos usan plantillas aprobadas por Meta ([plantillas.md](plantillas.md)) y resp
 
 | Ciclo | Regla |
 |---|---|
-| Seguimiento | Solo a quien pidió precio/info (intención detectada por la IA) y no agendó. Días 2, 5 y 10 desde la consulta. Se detiene si responde, agenda, entra a handoff o pide baja. Una nueva consulta reinicia el ciclo. |
+| Seguimiento | Solo a quien pidió precio/info (intención detectada por la IA) y no agendó. Días 2, 5 y 10 desde su último mensaje. Se detiene si responde a un mensaje de seguimiento, agenda, entra a handoff o pide baja; si sigue escribiendo antes del primero ("ok, lo pienso") no se detiene, solo se recorre el conteo. Una nueva consulta de precio/info reinicia el ciclo. |
 | Recordatorios | 24 h y 2 h antes de la cita (utilidad). Si el momento cae fuera de ventana: el de 24 h se adelanta al último momento permitido anterior; el de 2 h se omite. No se manda si la cita se creó dentro de ese plazo. |
 | Reseñas | Una sola solicitud 2 h después de marcar "Asistió", con el link de Google del config. Máximo una por contacto cada 90 días. |
 | Reactivación | Contactos importados con consentimiento, sin opt-out, sin cita futura y sin conversación en los últimos 30 días. Lote diario: 50; sube a 100 tras 7 días seguidos con calidad del número `GREEN`; con `RED` se pausa y se avisa al dueño. |

@@ -92,7 +92,8 @@ def recordatorios(con, cfg, t):
                 continue
             servicio = cfg.servicios.get(f["servicio_id"], {}).get("nombre", f["servicio_id"])
             r = _plantilla(con, cfg, c, "recordatorio_cita",
-                           [c["nombre"], servicio, base.fecha_humana(cfg, inicio), cfg.get("direccion", cfg["nombre"])])
+                           [c["nombre"], servicio, base.fecha_humana(cfg, inicio),
+                            cfg.get("direccion", cfg["nombre"]).rstrip(". ")])   # la plantilla ya pone el punto
             if r != "reintentar":
                 con.execute(f"UPDATE cita SET {campo}=? WHERE id=?", (base.iso(t) if r == "ok" else "error", f["id"]))
             n += r == "ok"

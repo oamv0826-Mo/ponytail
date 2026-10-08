@@ -164,8 +164,13 @@ def guardar_entrante(con, cfg, item, reintento=False):
         con.execute("UPDATE contacto SET primer_entrante=? WHERE id=?", (base.iso(ts), c["id"]))
         if not base.abierto(cfg, ts):
             base.evento(con, c["id"], "fuera_horario", creado=ts)
-    con.execute("UPDATE contacto SET ultimo_entrante=MAX(COALESCE(ultimo_entrante, ''), ?), seg_activo=0 WHERE id=?",
-                (base.iso(ts), c["id"]))
+    # Seguimiento: solo lo detiene una respuesta a un mensaje de seguimiento ya enviado (seg_paso > 0). Si el
+    # cliente sigue escribiendo antes del primero ("ok gracias, lo pienso"), los días 2/5/10 se cuentan desde
+    # su último mensaje: es justo el prospecto que el seguimiento debe rescatar.
+    con.execute("UPDATE contacto SET ultimo_entrante=MAX(COALESCE(ultimo_entrante, ''), ?), "
+                "seg_activo=CASE WHEN seg_paso>0 THEN 0 ELSE seg_activo END, "
+                "seg_inicio=CASE WHEN seg_activo=1 AND seg_paso=0 THEN MAX(COALESCE(seg_inicio, ''), ?) "
+                "ELSE seg_inicio END WHERE id=?", (base.iso(ts), base.iso(ts), c["id"]))
     return contacto(con, c["id"]), texto
 
 

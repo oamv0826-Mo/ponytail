@@ -44,9 +44,28 @@ class Seguimiento(Base3):
         self.tick_en(2026, 10, 30, 10, 0)
         self.assertEqual(len(self.enviados()), 3)
 
-    def test_se_detiene_si_responde_agenda_handoff_o_baja(self):
-        casos = {"+528100000011": "gracias, lo pienso", "+528100000012": "quiero hablar con una persona",
-                 "+528100000013": "baja"}
+    def test_lo_pienso_no_lo_detiene_y_cuenta_desde_el_ultimo_mensaje(self):
+        self.escribir("¿cuánto cuesta la limpieza?")              # martes 10:00
+        self.t = local(2026, 10, 7, 10, 0)
+        self.escribir("ok gracias, lo pienso")                   # miércoles: sigue activo, cuenta desde aquí
+        self.assertEqual(self.contacto()["seg_activo"], 1)
+        self.tick_en(2026, 10, 8, 10, 0)                         # 2 días desde el martes: todavía no
+        self.assertEqual(self.enviados("seguimiento_1"), [])
+        self.tick_en(2026, 10, 9, 10, 0)                         # 2 días desde el miércoles
+        self.assertEqual(len(self.enviados("seguimiento_1")), 1)
+
+    def test_responder_a_un_seguimiento_lo_detiene(self):
+        self.escribir("¿cuánto cuesta la limpieza?")
+        self.tick_en(2026, 10, 8, 10, 0)
+        self.t = local(2026, 10, 8, 11, 0)
+        self.escribir("ahorita no puedo, gracias")
+        self.assertEqual(self.contacto()["seg_activo"], 0)
+        self.tick_en(2026, 10, 11, 10, 0)
+        self.tick_en(2026, 10, 12, 10, 0)
+        self.assertEqual([m["plantilla"] for m in self.enviados()], ["seguimiento_1"])
+
+    def test_se_detiene_si_agenda_handoff_o_baja(self):
+        casos = {"+528100000012": "quiero hablar con una persona", "+528100000013": "baja"}
         for tel, respuesta in casos.items():
             self.escribir("¿cuánto cuesta la limpieza?", de=tel)
             self.escribir(respuesta, de=tel)
@@ -77,6 +96,7 @@ class Recordatorios(Base3):
         self.tick_en(2026, 10, 7, 12, 0)
         self.assertEqual(len(self.enviados("recordatorio_cita")), 1)
         self.assertIn("jueves 8 de octubre a las 12:00", self.enviados()[0]["texto"])
+        self.assertIn("Monterrey, N.L. Si necesitas", self.enviados()[0]["texto"])   # sin doble punto
         self.tick_en(2026, 10, 8, 10, 0)
         self.assertEqual(len(self.enviados("recordatorio_cita")), 2)
         self.tick_en(2026, 10, 8, 10, 5)

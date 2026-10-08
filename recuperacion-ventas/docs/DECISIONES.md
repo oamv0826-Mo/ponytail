@@ -124,3 +124,7 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - Texto del escalamiento sin minutos fijos (el umbral es configurable).
 - La revisión de opt-out vive en un solo lugar (`base.dio_baja`).
 - (Encontrado al probar la bandeja en Chromium real) "Asistió"/"No asistió" solo se pueden marcar el día de la cita o después, y la fecha de la venta desde una cita nunca es futura: antes se podía marcar asistencia de una cita futura y la venta se rechazaba.
+
+## Encontrado en la simulación de punta a punta
+- Seguimiento: "responde" se interpreta como responder a un mensaje de seguimiento ya enviado. Antes, cualquier mensaje después de pedir precio (p. ej. "ok gracias, lo pienso") cancelaba la secuencia antes del primer envío, justo en el caso central del documento ("piden precio, dicen 'lo pienso' y desaparecen"). Ahora esos mensajes solo recorren el conteo de días al último mensaje.
+- La IA simulada (solo modo prueba) responde con cortesía a "gracias / ok / lo pienso" en vez de pasar a humano, como lo haría la IA real; así la demo refleja el flujo real.
