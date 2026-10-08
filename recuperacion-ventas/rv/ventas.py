@@ -130,7 +130,8 @@ def registrar_venta(con, cfg, contacto_id, monto, fecha, por, cita_id=None):
                       "creado) VALUES (?,?,?,?,?,?,?)", (contacto_id, cita_id, centavos, f.isoformat(), origen, por,
                                                          base.iso(base.ahora())))
     if cur.rowcount == 0:
-        return None, "esa venta ya estaba registrada (mismo contacto, fecha y monto)"
+        return None, ("esa venta ya estaba registrada (misma cita y monto)" if cita_id else
+                      "esa venta ya estaba registrada (mismo contacto, fecha y monto)")
     return cur.lastrowid, None
 
 
@@ -158,7 +159,10 @@ def importar_ventas(con, cfg, ruta, por="importacion"):
 # ---------- reporte mensual ----------
 
 def _rango_mes(cfg, mes):
-    a = dt.datetime.strptime(mes, "%Y-%m").replace(tzinfo=cfg.tz)
+    try:
+        a = dt.datetime.strptime(mes, "%Y-%m").replace(tzinfo=cfg.tz)
+    except ValueError:
+        raise ValueError(f"mes inválido: {mes!r} (usa AAAA-MM, p. ej. 2026-10)") from None
     b = (a + dt.timedelta(days=32)).replace(day=1)
     return a, b
 
@@ -216,7 +220,9 @@ def datos_reporte(con, cfg, mes):
         "mediana_s": statistics.median(tiempos) if tiempos else None,
         "pct_5min": (100 * sum(1 for x in tiempos if x <= 300) / len(tiempos)) if tiempos else None,
         "sin_respuesta": sin_respuesta,
-        "citas_agendadas": cuenta("SELECT COUNT(*) FROM cita WHERE creado>=? AND creado<?", A, B),
+        # una cita reprogramada deja la anterior cancelada: solo cuentan las que siguen en pie
+        "citas_agendadas": cuenta("SELECT COUNT(*) FROM cita WHERE creado>=? AND creado<? AND estado<>'cancelada'", A, B),
+        "citas_canceladas": cuenta("SELECT COUNT(*) FROM cita WHERE creado>=? AND creado<? AND estado='cancelada'", A, B),
         "citas_asistidas": cuenta("SELECT COUNT(*) FROM cita WHERE estado='asistio' AND inicio>=? AND inicio<?", A, B),
         "citas_no_asistio": cuenta("SELECT COUNT(*) FROM cita WHERE estado='no_asistio' AND inicio>=? AND inicio<?", A, B),
         "citas_sin_cerrar": cuenta("SELECT COUNT(*) FROM cita WHERE estado='agendada' AND inicio>=? AND inicio<? "
@@ -261,7 +267,7 @@ def reporte(con, cfg, mes, resenas_google=None):
 |---|---|
 | 1. Consultas recibidas | **{d['consultas']}** ({d['fuera_horario']} fuera de horario) |
 | 2. Tiempo de respuesta (mediana) | **{_duracion(d['mediana_s'])}** ({pct}) |
-| 3. Citas agendadas | **{d['citas_agendadas']}** (asistieron {d['citas_asistidas']}, no asistieron {d['citas_no_asistio']}) |
+| 3. Citas agendadas | **{d['citas_agendadas']}** (asistieron {d['citas_asistidas']}, no asistieron {d['citas_no_asistio']}; canceladas: {d['citas_canceladas']}) |
 | 4. Ventas recuperadas | **{_pesos(d['recuperado'])}** en {d['recuperadas_n']} {'venta' if d['recuperadas_n'] == 1 else 'ventas'} |
 | 5. Reseñas | **{resenas}** |
 

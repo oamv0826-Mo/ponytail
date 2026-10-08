@@ -138,3 +138,50 @@ class Ronda3Tick(Caso):
         self.t = local(2026, 10, 9, 10, 0)
         motor.procesar_item(self.con, self.cfg, mensaje_media(self.t, "reaction", {"message_id": "x", "emoji": "❤️"}, "wamid.R2"))
         self.assertEqual(ventas.datos_reporte(self.con, self.cfg, "2026-10")["consultas"], 1)
+
+
+class Ronda4Ventas(Caso):
+    def test_dos_citas_distintas_mismo_dia_y_monto_cuentan_las_dos(self):
+        from ayuda import local
+        from rv import agenda, ventas
+        self.escribir("hola")
+        c = self.contacto()
+        citas = [agenda.reservar(self.con, self.cfg, c, "limpieza", local(2026, 10, 6, h, 0), creado_por="humano:ana")
+                 for h in (12, 13)]
+        self.t = local(2026, 10, 6, 14, 0)
+        r = [ventas.registrar_venta(self.con, self.cfg, c["id"], "800", "2026-10-06", "x", cid)[1] for cid in citas]
+        self.assertEqual(r, [None, None])
+        self.assertIn("misma cita", ventas.registrar_venta(self.con, self.cfg, c["id"], "800", "2026-10-06", "x", citas[0])[1])
+        self.assertIsNone(ventas.registrar_venta(self.con, self.cfg, c["id"], "500", "2026-10-06", "x")[1])
+        self.assertIn("mismo contacto", ventas.registrar_venta(self.con, self.cfg, c["id"], "500", "2026-10-06", "x")[1])
+
+    def test_reprogramar_no_cuenta_dos_citas(self):
+        from rv import ventas
+        self.escribir("quiero agendar una limpieza")
+        self.escribir("3")
+        self.escribir("necesito cambiar mi cita")
+        self.escribir("2")
+        d = ventas.datos_reporte(self.con, self.cfg, "2026-10")
+        self.assertEqual((d["citas_agendadas"], d["citas_canceladas"]), (1, 1))
+
+    def test_mes_invalido_da_mensaje_claro(self):
+        from rv import ventas
+        with self.assertRaisesRegex(ValueError, "usa AAAA-MM"):
+            ventas.reporte(self.con, self.cfg, "2026-13")
+
+    def test_migracion_v4_conserva_ventas(self):
+        import sqlite3
+        ruta = self.dir / "vieja.db"
+        con = base.conectar(ruta)
+        with mock.patch.object(base, "secciones_esquema", return_value=[x for x in base.secciones_esquema() if x[0] <= 3]):
+            base.migrar(con)
+        con.execute("INSERT INTO contacto (telefono, creado) VALUES ('+528100000001', 'x')")
+        con.execute("INSERT INTO venta (contacto_id, monto_centavos, fecha, origen, registrado_por, creado) "
+                    "VALUES (1, 80000, '2026-10-01', 'seguimiento', 'x', 'x')")
+        base.migrar(con, ruta)
+        self.assertEqual(con.execute("SELECT monto_centavos, origen FROM venta").fetchone()[:], (80000, "seguimiento"))
+        self.assertGreaterEqual(con.execute("PRAGMA user_version").fetchone()[0], 4)
+        with self.assertRaises(sqlite3.IntegrityError):
+            con.execute("INSERT INTO venta (contacto_id, monto_centavos, fecha, origen, registrado_por, creado) "
+                        "VALUES (1, 80000, '2026-10-01', 'x', 'x', 'x')")
+        con.close()

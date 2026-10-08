@@ -1,6 +1,6 @@
 # Ciclo autónomo de caza de errores
 
-Estado: rondas = 3 · rondas seguidas sin hallazgos = 0 · se detiene con 2 limpias seguidas o al llegar a 8.
+Estado: rondas = 4 · rondas seguidas sin hallazgos = 0 · se detiene con 2 limpias seguidas o al llegar a 8.
 
 Orden de áreas: 1 motor/guardrails IA · 2 agenda/Google · 3 tick/ventanas · 4 ventas/atribución/reporte ·
 5 bandeja/seguridad · 6 CSV/teléfonos · 7 migraciones/respaldo/caídas · 8 kit (auditoria, demo, prueba) ·
@@ -34,3 +34,12 @@ Revisado sin hallazgos: cálculo de horarios con margen y anticipación, resta d
 | 3 | Una reacción días después contaba como "consulta recibida" en el reporte (inflaba el número 1 y el de sin respuesta). | Las reacciones se excluyen del cálculo de consultas. | `test_reaccion_no_cuenta_como_consulta_en_el_reporte` |
 
 Revisado sin hallazgos: recordatorios 24 h/2 h y su adelanto, reseñas cada 90 días, seguimiento sin dos envíos el mismo día, lotes de reactivación y calidad del número, reintentos ante fallas de Meta.
+
+## Ronda 4 · ventas, atribución y reporte
+| # | Hallazgo (reproducido) | Corrección | Prueba |
+|---|---|---|---|
+| 1 | Dos citas distintas del mismo contacto, el mismo día y con el mismo monto (p. ej. dos hijos): la segunda venta se rechazaba como duplicada y no contaba para la garantía. | Esquema v4: duplicado = misma cita y monto (doble clic) o, sin cita, mismo contacto/fecha/monto (CSV reimportado). La migración reconstruye la tabla y conserva las ventas. | `test_dos_citas_distintas_mismo_dia_y_monto_cuentan_las_dos`, `test_migracion_v4_conserva_ventas` |
+| 2 | Una cita reprogramada contaba dos veces en "citas agendadas" (la nueva y la anterior, cancelada). | Solo cuentan las citas que siguen en pie; las canceladas se muestran aparte. | `test_reprogramar_no_cuenta_dos_citas` |
+| 3 | `reporte 2026-13` terminaba con un traceback. | Mensaje claro y código de salida 1. | `test_mes_invalido_da_mensaje_claro` |
+
+Revisado sin hallazgos: reglas de atribución contra el anexo (ventanas de 60 días, orden de reglas, fin de día local), validación de montos, garantía y su periodo, página estática.

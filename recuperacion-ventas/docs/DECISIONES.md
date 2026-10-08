@@ -153,3 +153,5 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - Confirmar cancelación: primera palabra afirmativa y sin "pero/mejor/cambia/no" después; ante la duda no se cancela.
 - Reacciones: no cuentan como consulta, ni como mensaje pendiente para escalar. Sí abren la ventana de 24 h y sí cuentan como respuesta a un seguimiento (son una señal de interés).
 - Escalamiento: 15 min de horario abierto desde lo último entre el mensaje del cliente y el paso a humano.
+- Venta duplicada (esquema v4): con cita, misma cita y mismo monto; sin cita, mismo contacto, fecha y monto. Una cita puede tener varias ventas de montos distintos (servicio + producto).
+- "Citas agendadas" del reporte = citas creadas en el mes que no quedaron canceladas; las canceladas (incluidas las reprogramadas) se reportan aparte.

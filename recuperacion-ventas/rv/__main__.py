@@ -94,7 +94,10 @@ def cmd_importar_ventas(cfg, args):
 def cmd_reporte(cfg, args):
     mes = args.mes or (base.ahora().astimezone(cfg.tz).replace(day=1) - dt.timedelta(days=1)).strftime("%Y-%m")
     with base.db(cfg) as con:
-        texto = ventas.reporte(con, cfg, mes, args.resenas_google)
+        try:
+            texto = ventas.reporte(con, cfg, mes, args.resenas_google)
+        except ValueError as e:
+            sys.exit(str(e))
     carpeta = cfg.carpeta / "reportes"
     carpeta.mkdir(exist_ok=True)
     (carpeta / f"reporte-{mes}.md").write_text(texto, encoding="utf-8")

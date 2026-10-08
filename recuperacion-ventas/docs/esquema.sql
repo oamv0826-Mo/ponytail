@@ -138,3 +138,22 @@ CREATE INDEX entrada_sin_terminar ON entrada(terminado, id);
 -- Archivos del cliente (foto, nota de voz, documento): id de Meta para descargarlos desde la bandeja.
 ALTER TABLE mensaje ADD COLUMN media_id TEXT;
 ALTER TABLE mensaje ADD COLUMN media_mime TEXT;
+
+-- version: 4
+-- Ventas: dos citas distintas pueden tener ventas del mismo monto el mismo día. Duplicado = misma cita y monto
+-- (doble clic) o, sin cita, mismo contacto, fecha y monto (reimportar el mismo CSV).
+CREATE TABLE venta_v4 (
+  id INTEGER PRIMARY KEY,
+  contacto_id INTEGER NOT NULL REFERENCES contacto(id),
+  cita_id INTEGER REFERENCES cita(id),
+  monto_centavos INTEGER NOT NULL CHECK (monto_centavos > 0),
+  fecha TEXT NOT NULL,
+  origen TEXT NOT NULL,
+  registrado_por TEXT NOT NULL,
+  creado TEXT NOT NULL
+);
+INSERT INTO venta_v4 SELECT id, contacto_id, cita_id, monto_centavos, fecha, origen, registrado_por, creado FROM venta;
+DROP TABLE venta;
+ALTER TABLE venta_v4 RENAME TO venta;
+CREATE UNIQUE INDEX venta_sin_cita ON venta(contacto_id, fecha, monto_centavos) WHERE cita_id IS NULL;
+CREATE UNIQUE INDEX venta_por_cita ON venta(cita_id, monto_centavos) WHERE cita_id IS NOT NULL;
