@@ -1,6 +1,6 @@
 # Ciclo autónomo de caza de errores
 
-Estado: rondas = 1 · rondas seguidas sin hallazgos = 0 · se detiene con 2 limpias seguidas o al llegar a 8.
+Estado: rondas = 2 · rondas seguidas sin hallazgos = 0 · se detiene con 2 limpias seguidas o al llegar a 8.
 
 Orden de áreas: 1 motor/guardrails IA · 2 agenda/Google · 3 tick/ventanas · 4 ventas/atribución/reporte ·
 5 bandeja/seguridad · 6 CSV/teléfonos · 7 migraciones/respaldo/caídas · 8 kit (auditoria, demo, prueba) ·
@@ -17,3 +17,11 @@ Pruebas de cada hallazgo: `tests/test_bughunt.py`.
 | 4 | Una reacción 👍 se trataba como "mensaje que no es texto": pasaba a humano y mandaba avisos al equipo. | Las reacciones se guardan y no se contestan. | `test_reaccion_no_pasa_a_humano_ni_avisa` |
 
 Observación sin cambio: las palabras de urgencia son por frase exacta ("sangran" no coincide con "sangra"); se ajustan por giro en `palabras.urgencia_medica` del config y la IA real pasa a humano lo médico de todos modos.
+
+## Ronda 2 · agenda y Google Calendar
+| # | Hallazgo (reproducido) | Corrección | Prueba |
+|---|---|---|---|
+| 1 | Respuestas naturales a la propuesta de horarios no agendaban: "la opción 2", "opción 2 por favor", "la 2 porfa", "el segundo", "a las 4" (5 de 6 casos reales terminaban en humano; con la IA real, en una nueva propuesta). | `agenda.elegir_opcion`: número suelto en mensaje corto, ordinales, "la última", hora del horario ofrecido ("a las 4", "9:30"); nunca elige si hay negación ("no", "ninguno", "otro") o ambigüedad ("el 2 o el 3"). | `test_respuestas_naturales_eligen_el_horario`, `test_la_opcion_2_agenda` |
+| 2 | Confirmar una cancelación con "sí, cancélala por favor" o "si porfavor" no cancelaba (solo frases exactas) y volvía a preguntar. | `agenda.es_si`: empieza con sí/claro/ok/confirmo… y no trae dudas ("sí, pero mejor cámbiala" no cancela). | `test_confirmaciones_de_cancelacion` |
+
+Revisado sin hallazgos: cálculo de horarios con margen y anticipación, resta de intervalos de Google al reprogramar, candado de reserva, cancelación con falla de Google.

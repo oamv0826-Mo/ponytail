@@ -312,8 +312,47 @@ def ejecutar(con, cfg, c, r):
     return proponer(con, cfg, c, cita["servicio_id"], reprograma=cita["id"])
 
 
-_ELECCION = re.compile(r"^(?:(?:la|el|opcion|numero|quiero la|quiero el)\s+)?([1-9])$")
-_SI = {"si", "si por favor", "si cancela", "si cancelala", "si gracias", "confirmo", "claro", "ok", "de acuerdo"}
+_ORDINALES = {"primero": 1, "primera": 1, "1ro": 1, "1ra": 1, "segundo": 2, "segunda": 2, "2do": 2, "2da": 2,
+              "tercero": 3, "tercera": 3, "3ro": 3, "3ra": 3}
+_NEGACION = {"no", "ninguno", "ninguna", "otro", "otra", "otros", "otras"}
+_HORA = {"las", "hrs", "horas", "pm", "am"}
+
+
+def elegir_opcion(cfg, tn, slots):
+    """Índice (0..n-1) del horario elegido en un mensaje corto, o None si no es claro.
+
+    Acepta "2", "la 2", "opción 2 por favor", "el segundo", "la última", "a las 4", "la de las 12:30"."""
+    tokens = tn.split()
+    if not tokens or len(tokens) > 8 or _NEGACION & set(tokens):
+        return None
+    nums = [int(t) for t in tokens if t.isdigit()]
+    ords = [_ORDINALES[t] for t in tokens if t in _ORDINALES] + [len(slots) for t in tokens if t in ("ultimo", "ultima")]
+    locales = [s.astimezone(cfg.tz) for s in slots]
+
+    def por_hora(h, m=None):
+        hs = [i for i, l in enumerate(locales) if l.hour in (h, h + 12) and (m is None or l.minute == m)]
+        return hs[0] if len(hs) == 1 else None
+
+    if len(nums) == 2 and nums[1] in (0, 15, 30, 45) and nums[0] <= 23:
+        return por_hora(nums[0], nums[1])
+    if len(nums) == 1:
+        n = nums[0]
+        if _HORA & set(tokens) or not 1 <= n <= len(slots):
+            return por_hora(n) if 1 <= n <= 23 else None
+        return n - 1
+    if not nums and len(ords) == 1 and 1 <= ords[0] <= len(slots):
+        return ords[0] - 1
+    return None
+
+
+_SI_INICIO = {"si", "claro", "ok", "confirmo", "dale", "va", "sale", "correcto", "adelante"}
+_SI_DUDA = {"pero", "mejor", "cambia", "cambiala", "cambiar", "reprograma", "reprogramar", "mover", "no"}
+
+
+def es_si(tn):
+    """Confirmación clara: empieza con sí/claro/ok… y no trae dudas ("sí, pero mejor cámbiala")."""
+    tokens = tn.split()
+    return bool(tokens) and (tokens[0] in _SI_INICIO or tn == "de acuerdo") and not _SI_DUDA & set(tokens[1:])
 
 
 def responder_propuesta(con, cfg, c, tn):
@@ -323,7 +362,7 @@ def responder_propuesta(con, cfg, c, tn):
         con.execute("UPDATE contacto SET propuesta=NULL WHERE id=?", (c["id"],))
         return False
     if p["tipo"] == "cancelar":
-        if tn in _SI:
+        if es_si(tn):
             cita = con.execute("SELECT * FROM cita WHERE id=?", (p["cita_id"],)).fetchone()
             if not cita or cita["estado"] != "agendada":
                 con.execute("UPDATE contacto SET propuesta=NULL WHERE id=?", (c["id"],))
@@ -343,10 +382,10 @@ def responder_propuesta(con, cfg, c, tn):
             motor.responder(con, cfg, c, "De acuerdo, tu cita sigue en pie.")
             return True
         return False
-    m = _ELECCION.match(tn)
-    if not m or not 1 <= int(m.group(1)) <= len(p["slots"]):
+    i = elegir_opcion(cfg, tn, [base.de_iso(x) for x in p["slots"]])
+    if i is None:
         return False
-    inicio = base.de_iso(p["slots"][int(m.group(1)) - 1])
+    inicio = base.de_iso(p["slots"][i])
     try:
         cita_id = reservar(con, cfg, c, p["servicio_id"], inicio, reprograma=p.get("reprograma"))
     except AgendaError as e:

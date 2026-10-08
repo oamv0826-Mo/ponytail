@@ -149,3 +149,5 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 ## Encontrado en la revisión de errores del núcleo (2026-10-08)
 - Envíos a `52` + 10 en vez del `wa_id` con `521` (ver Mensajería). Prueba: `MovilMexicoSinUno`.
 - El servidor rechaza con 413 un `Content-Length` negativo: antes `read(-1)` leía sin límite hasta que el cliente cerraba la conexión. Prueba: `CuerpoConLargoNegativo`.
+- Elección de horario flexible pero conservadora: un solo número (opción u hora ofrecida) u ordinal en un mensaje de hasta 8 palabras; con negación o dos números no se elige y el mensaje pasa a la IA.
+- Confirmar cancelación: primera palabra afirmativa y sin "pero/mejor/cambia/no" después; ante la duda no se cancela.

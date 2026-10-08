@@ -5,7 +5,7 @@ import threading
 from unittest import mock
 
 from ayuda import Caso
-from rv import motor, web
+from rv import base, motor, web
 
 
 def mensaje_media(t, tipo, datos, msg_id):
@@ -73,3 +73,28 @@ class Ronda1Media(Caso):
             st, cab, cuerpo = self.pedir(f"/bandeja/media/{self.mid}", cookie=f"rv_sesion={token}")
         self.assertEqual((st, cab["Content-Type"], cab["Content-Disposition"]), (200, "application/octet-stream", "attachment"))
         self.assertEqual(cuerpo, b"<svg onload=alert(1)>")
+
+
+class Ronda2Agenda(Caso):
+    def test_respuestas_naturales_eligen_el_horario(self):
+        from ayuda import local
+        from rv import agenda
+        slots = [local(2026, 10, 6, 12, 0), local(2026, 10, 6, 16, 0), local(2026, 10, 7, 9, 30)]
+        casos = {"2": 1, "la opcion 2": 1, "opcion 2 por favor": 1, "la 2 porfa": 1, "el segundo": 1, "la ultima": 2,
+                 "a las 4": 1, "la de las 12": 0, "9 30": 2, "las 9": 2,
+                 "no": None, "ninguno me queda": None, "otro horario": None, "a las 5": None, "la 7": None,
+                 "el 2 o el 3": None, "": None}
+        for texto, esperado in casos.items():
+            self.assertEqual(agenda.elegir_opcion(self.cfg, texto, slots), esperado, texto)
+
+    def test_la_opcion_2_agenda(self):
+        self.escribir("quiero agendar una limpieza")
+        [m] = self.escribir("La opción 2 🙏")
+        self.assertIn("quedó para el martes 6 de octubre a las 16:00", m["texto"])
+
+    def test_confirmaciones_de_cancelacion(self):
+        from rv import agenda
+        for si in ("si", "sí, cancélala por favor", "si porfavor", "claro", "ok gracias", "de acuerdo"):
+            self.assertTrue(agenda.es_si(base.normalizar_texto(si)), si)
+        for no in ("sí, pero mejor cámbiala", "si no hay de otra", "no", "mmm", ""):
+            self.assertFalse(agenda.es_si(base.normalizar_texto(no)), no)
