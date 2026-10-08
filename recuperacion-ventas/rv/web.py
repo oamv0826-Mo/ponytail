@@ -266,7 +266,8 @@ def accion_conversacion(con, cfg, c, usuario, nombre, form):
 # ---------- handler ----------
 
 def crear_servidor(cfg, host="127.0.0.1", puerto=None):
-    limitador = Limitador()
+    limitador = Limitador()                    # por usuario: 5 fallos
+    limitador_ip = Limitador(max_fallos=20)    # por IP: más alto, una oficina comparte IP
     despertar = threading.Event()
     origen = "{0.scheme}://{0.netloc}".format(urlparse(cfg["url_publica"]))
     seguro = cfg["url_publica"].startswith("https://")
@@ -331,7 +332,7 @@ def crear_servidor(cfg, host="127.0.0.1", puerto=None):
             q = parse_qs(u.query)
             if u.path == "/webhook":
                 ok = q.get("hub.mode") == ["subscribe"] and verify_token(cfg) and \
-                    hmac.compare_digest((q.get("hub.verify_token") or [""])[0], verify_token(cfg))
+                    hmac.compare_digest((q.get("hub.verify_token") or [""])[0].encode(), verify_token(cfg).encode())
                 return self.enviar(200, (q.get("hub.challenge") or [""])[0], "text/plain") if ok else self.enviar(403)
             if u.path == "/salud":
                 return self.enviar(200, "ok", "text/plain")
@@ -431,10 +432,11 @@ def crear_servidor(cfg, host="127.0.0.1", puerto=None):
             nombre = (form.get("usuario") or [""])[0].strip()
             clave = (form.get("clave") or [""])[0]
             claves = (f"u:{nombre}", f"ip:{self.ip()}")
-            if limitador.bloqueado(*claves):
+            if limitador.bloqueado(claves[0]) or limitador_ip.bloqueado(claves[1]):
                 return self.enviar(429, pagina(cfg, "Entrar", form_login(cfg, "Demasiados intentos. Espera 15 minutos.")))
             if not verificar_clave(con, nombre, clave):
-                limitador.fallo(*claves)
+                limitador.fallo(claves[0])
+                limitador_ip.fallo(claves[1])
                 return self.enviar(401, pagina(cfg, "Entrar", form_login(cfg, "Usuario o contraseña incorrectos.")))
             limitador.exito(claves[0])
             return self.redirigir("/bandeja", [self.cookie(abrir_sesion(con, nombre), SESION_HORAS * 3600)])

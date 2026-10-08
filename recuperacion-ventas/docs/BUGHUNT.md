@@ -1,6 +1,6 @@
 # Ciclo autónomo de caza de errores
 
-Estado: rondas = 4 · rondas seguidas sin hallazgos = 0 · se detiene con 2 limpias seguidas o al llegar a 8.
+Estado: rondas = 5 · rondas seguidas sin hallazgos = 0 · se detiene con 2 limpias seguidas o al llegar a 8.
 
 Orden de áreas: 1 motor/guardrails IA · 2 agenda/Google · 3 tick/ventanas · 4 ventas/atribución/reporte ·
 5 bandeja/seguridad · 6 CSV/teléfonos · 7 migraciones/respaldo/caídas · 8 kit (auditoria, demo, prueba) ·
@@ -43,3 +43,11 @@ Revisado sin hallazgos: recordatorios 24 h/2 h y su adelanto, reseñas cada 90 d
 | 3 | `reporte 2026-13` terminaba con un traceback. | Mensaje claro y código de salida 1. | `test_mes_invalido_da_mensaje_claro` |
 
 Revisado sin hallazgos: reglas de atribución contra el anexo (ventanas de 60 días, orden de reglas, fin de día local), validación de montos, garantía y su periodo, página estática.
+
+## Ronda 5 · bandeja web y seguridad
+| # | Hallazgo (reproducido) | Corrección | Prueba |
+|---|---|---|---|
+| 1 | Un `hub.verify_token` o una firma `X-Hub-Signature-256` con caracteres no ASCII hacía fallar `hmac.compare_digest` (TypeError): el servidor cortaba la conexión con traceback en vez de responder 403/401. | Comparación en bytes. | `test_texto_no_ascii_en_verificacion_y_firma_no_tumba_la_conexion` |
+| 2 | Cinco fallos de una persona bloqueaban el login de toda la oficina 15 min (mismo límite por IP que por usuario; en una oficina todos salen por la misma IP). | 5 fallos por usuario (lo pedido) y 20 por IP. | `test_fallos_de_una_persona_no_bloquean_a_la_oficina` |
+
+Revisado sin hallazgos: escape de todo dato del cliente en bandeja/citas/ventas, anti-CSRF por Origin, cookies, expiración de sesión, cabeceras de seguridad, descarga de archivos (ronda 1), límites de tamaño de cuerpo.

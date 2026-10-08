@@ -155,3 +155,4 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - Escalamiento: 15 min de horario abierto desde lo último entre el mensaje del cliente y el paso a humano.
 - Venta duplicada (esquema v4): con cita, misma cita y mismo monto; sin cita, mismo contacto, fecha y monto. Una cita puede tener varias ventas de montos distintos (servicio + producto).
 - "Citas agendadas" del reporte = citas creadas en el mes que no quedaron canceladas; las canceladas (incluidas las reprogramadas) se reportan aparte.
+- Login: bloqueo de 15 min tras 5 fallos por usuario y tras 20 por IP (antes 5 y 5): un error de una persona no deja fuera a toda la oficina.

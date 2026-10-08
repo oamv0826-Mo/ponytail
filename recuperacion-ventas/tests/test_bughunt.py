@@ -185,3 +185,43 @@ class Ronda4Ventas(Caso):
             con.execute("INSERT INTO venta (contacto_id, monto_centavos, fecha, origen, registrado_por, creado) "
                         "VALUES (1, 80000, '2026-10-01', 'x', 'x', 'x')")
         con.close()
+
+
+class Ronda5Bandeja(Caso):
+    def setUp(self):
+        super().setUp()
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            self.puerto = s.getsockname()[1]
+        self.cfg["url_publica"] = f"http://127.0.0.1:{self.puerto}"
+        srv = web.crear_servidor(self.cfg, puerto=self.puerto)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+
+    def pedir(self, metodo, ruta, cuerpo=None, cabeceras=None):
+        h = http.client.HTTPConnection("127.0.0.1", self.puerto, timeout=5)
+        h.request(metodo, ruta, body=cuerpo, headers=cabeceras or {})
+        r = h.getresponse()
+        r.read()
+        return r.status
+
+    def test_texto_no_ascii_en_verificacion_y_firma_no_tumba_la_conexion(self):
+        from rv import wa
+        self.assertEqual(self.pedir("GET", "/webhook?hub.mode=subscribe&hub.verify_token=%C3%B1&hub.challenge=1"), 403)
+        self.assertFalse(wa.firma_valida(self.cfg, b"{}", "sha256=\xe9"))
+        self.assertEqual(self.pedir("POST", "/webhook", b"{}", {"X-Hub-Signature-256": "sha256=\xe9"}), 401)
+
+    def test_fallos_de_una_persona_no_bloquean_a_la_oficina(self):
+        from urllib.parse import urlencode
+        web.crear_usuario(self.con, "ana", "clave-segura-123")
+        web.crear_usuario(self.con, "luis", "clave-segura-456")
+        cab = {"Origin": self.cfg["url_publica"], "Content-Type": "application/x-www-form-urlencoded"}
+        login = lambda u, c: self.pedir("POST", "/bandeja/login", urlencode({"usuario": u, "clave": c}), cab)  # noqa: E731
+        for _ in range(5):
+            self.assertEqual(login("ana", "mal"), 401)
+        self.assertEqual(login("ana", "clave-segura-123"), 429)     # ana sí queda bloqueada
+        self.assertEqual(login("luis", "clave-segura-456"), 303)    # luis, misma IP, entra
+        for i in range(20):
+            login(f"x{i}", "mal")                                   # muchos usuarios distintos desde la misma IP
+        self.assertEqual(login("luis", "clave-segura-456"), 429)    # la IP sí se bloquea a los 20

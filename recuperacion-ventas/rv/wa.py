@@ -27,7 +27,9 @@ def firmar(secreto, cuerpo):
 
 def firma_valida(cfg, cuerpo, cabecera):
     secreto = app_secret(cfg)
-    return bool(secreto and cabecera) and hmac.compare_digest(firmar(secreto, cuerpo), cabecera)
+    # en bytes: compare_digest con texto no ASCII lanza TypeError y tiraría la conexión
+    return bool(secreto and cabecera) and hmac.compare_digest(firmar(secreto, cuerpo).encode(),
+                                                              cabecera.encode("utf-8", "replace"))
 
 
 def separar(payload):
