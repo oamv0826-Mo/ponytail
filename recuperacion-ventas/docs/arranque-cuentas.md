@@ -34,7 +34,7 @@ Con los pasos 1 a 6 ya puedes hacer la prueba real desde tu Mac ([prueba-real.md
 1. Entra a <https://developers.facebook.com> con tu Facebook personal y pulsa **Comenzar** para registrarte como
    desarrollador (te pide confirmar tu teléfono).
 2. **Mis apps → Crear app**. Elige el caso de uso **Conectar con clientes por WhatsApp** y el tipo **Negocio**.
-   Nombre: por ejemplo "Recuperación de Ventas".
+   Nombre: por ejemplo "Agorá".
 3. Te pide un **portafolio comercial** (antes "Business Manager"). Crea uno a tu nombre o al de tu negocio. Es la
    cuenta donde vivirán después los números de tus clientes.
 4. En el menú de la app: **WhatsApp → Configuración de la API**. Meta ya creó dos cosas:

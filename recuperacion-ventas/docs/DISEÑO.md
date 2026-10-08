@@ -1,4 +1,4 @@
-# Sistema de Recuperación de Ventas: diseño
+# Agorá: diseño del sistema de recuperación de ventas
 
 Fuente: "La idea: Sistema de Recuperación de Ventas" (Oliver Méndez, 5 oct 2026) y las decisiones
 aprobadas en la conversación de diseño. Las decisiones tomadas sin consulta están en

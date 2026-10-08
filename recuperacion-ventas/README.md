@@ -1,4 +1,6 @@
-# Sistema de Recuperación de Ventas
+# Agorá
+
+Sistema de recuperación de ventas.
 
 WhatsApp con IA, citas, seguimiento, reactivación, reseñas y reporte mensual para negocios de servicio.
 Python 3.11+ sin dependencias. Diseño: [docs/DISEÑO.md](docs/DISEÑO.md) · Decisiones: [docs/DECISIONES.md](docs/DECISIONES.md).

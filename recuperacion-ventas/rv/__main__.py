@@ -169,7 +169,7 @@ def cmd_prueba_real(cfg, args):
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(prog="rv", description="Sistema de Recuperación de Ventas")
+    p = argparse.ArgumentParser(prog="rv", description="Agorá: sistema de recuperación de ventas")
     p.add_argument("--cliente", default=os.environ.get("RV_CLIENTE", "."), help="carpeta del cliente")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("serve", help="webhook + bandeja web")
