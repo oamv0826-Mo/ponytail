@@ -133,6 +133,38 @@ def cmd_configurar_webhook(cfg, args):
     print(json.dumps(verificar.configurar_override(cfg)))
 
 
+def cmd_auditoria(args):
+    from . import auditoria
+    nicho = auditoria.cargar_nicho(args.nicho)
+    carpeta = Path(args.carpeta)
+    if not (carpeta / "negocios.csv").exists():
+        auditoria.crear_plantilla(carpeta)
+        print(f"Creé {carpeta / 'negocios.csv'}: una fila por negocio (ábrelo en Excel o Numbers).")
+        print(f"Mensaje de prueba para {nicho['nicho']}: {nicho['auditoria']['mensaje_prueba']}")
+        print("Cuando lo llenes, corre el mismo comando para generar los reportes.")
+        return
+    resultados, errores = auditoria.generar(carpeta, nicho)
+    for linea, motivo in errores:
+        print(f"  línea {linea}: {motivo}")
+    for n, p in sorted(resultados, key=lambda x: -auditoria.total(x[1])):
+        print(f"{auditoria.total(p):>4}  {n['negocio']}")
+    if resultados:
+        print(f"Reportes en {carpeta / 'reportes'} · resumen interno en {carpeta / 'resumen.html'}")
+    if errores:
+        sys.exit(1)
+
+
+def cmd_demo_ventas(args):
+    from . import auditoria, demo
+    demo.correr(auditoria.cargar_nicho(args.nicho), args.carpeta, 0 if args.rapido else 1.8)  # ~3 min
+
+
+def cmd_prueba_real(cfg, args):
+    from . import prueba
+    with base.db(cfg) as con:
+        prueba.correr(con, cfg, args.tel, args.paso)
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="rv", description="Sistema de Recuperación de Ventas")
     p.add_argument("--cliente", default=os.environ.get("RV_CLIENTE", "."), help="carpeta del cliente")
@@ -164,7 +196,20 @@ def main(argv=None):
     u = sub.add_parser("usuario", help="crea o cambia la contraseña de un usuario de la bandeja")
     u.add_argument("nombre")
     u.add_argument("--clave-stdin", action="store_true")
+    au = sub.add_parser("auditoria", help="auditoría de fugas: crea negocios.csv o genera los reportes (no usa --cliente)")
+    au.add_argument("--nicho", required=True, help="archivo de nicho, p. ej. nichos/clinica-estetica.json")
+    au.add_argument("carpeta", help="carpeta de la auditoría (ahí vive negocios.csv)")
+    dv = sub.add_parser("demo-ventas", help="demo de ~3 min para dueños, sin cuentas (no usa --cliente)")
+    dv.add_argument("--nicho", required=True)
+    dv.add_argument("--carpeta", help="dónde guardar el cliente de la demo (por defecto, una carpeta temporal)")
+    dv.add_argument("--rapido", action="store_true", help="sin pausas")
+    pr = sub.add_parser("prueba-real", help="recorrido guiado con tu teléfono (docs/prueba-real.md)")
+    pr.add_argument("--tel", required=True, help="tu número de WhatsApp (el que escribe como cliente)")
+    pr.add_argument("paso", nargs="?", help="repetir un solo paso: conexion, noche, seguimiento, cita, baja, urgencia, "
+                                           "handoff, asistencia, venta, reporte")
     args = p.parse_args(argv)
+    if args.cmd in ("auditoria", "demo-ventas"):
+        return {"auditoria": cmd_auditoria, "demo-ventas": cmd_demo_ventas}[args.cmd](args)
 
     cfg = base.cargar_config(args.cliente)
     base.abrir_db(cfg).close()  # migraciones
@@ -173,7 +218,7 @@ def main(argv=None):
      "importar-clientes": lambda: cmd_importar_clientes(cfg, args),
      "importar-ventas": lambda: cmd_importar_ventas(cfg, args), "reporte": lambda: cmd_reporte(cfg, args),
      "pagina": lambda: cmd_pagina(cfg, args), "verificar": lambda: cmd_verificar(cfg, args),
-     "respaldo": lambda: cmd_respaldo(cfg, args),
+     "respaldo": lambda: cmd_respaldo(cfg, args), "prueba-real": lambda: cmd_prueba_real(cfg, args),
      "configurar-webhook": lambda: cmd_configurar_webhook(cfg, args)}[args.cmd]()
 
 

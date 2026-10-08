@@ -6,9 +6,13 @@ Marca cada casilla. Lo que dice **[dueño]** lo aprueba o lo entrega el dueño d
 - [ ] Escribir al WhatsApp del negocio en horario y fuera de horario; anotar cuánto tarda en contestar (capturas).
 - [ ] Pedir precio y no volver a escribir: ¿alguien da seguimiento? (capturas).
 - [ ] Comparar con 2 competidores del mismo giro.
-- [ ] Estimar: consultas/mes × % sin respuesta oportuna × ticket = venta en riesgo. Presentar con capturas.
+- [ ] Registrar todo en `negocios.csv` y generar el reporte de una página: `python3 -m rv auditoria --nicho nichos/<giro>.json <carpeta>`
+      (calcula el puntaje de 100 y la venta en riesgo con los datos del dueño). Presentar con capturas.
+- [ ] Demo de 3 minutos en la reunión: `python3 -m rv demo-ventas --nicho nichos/<giro>.json` (guion en `docs/demo-ventas.md`).
 
 ## Semana 1: cuentas y datos
+Paso a paso de cada cuenta, con costo y tiempo: [arranque-cuentas.md](arranque-cuentas.md).
+
 - [ ] **[dueño]** Firma del contrato y del anexo (`docs/anexo-contrato.md`), con fecha de inicio y mensualidad.
 - [ ] **[dueño]** Número para WhatsApp Business Platform (Cloud API). Si el número ya usa la app de WhatsApp Business, decidir: número nuevo o coexistencia.
 - [ ] Alta del número en tu app de Meta (Embedded Signup o WhatsApp Manager); anotar `phone_number_id` y `waba_id`.

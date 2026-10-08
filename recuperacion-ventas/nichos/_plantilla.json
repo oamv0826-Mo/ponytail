@@ -1,0 +1,29 @@
+{
+  "_instrucciones": "Copia este archivo como nichos/<giro>.json y llénalo. Precios en MXN sin IVA, duración en minutos (entero). palabras_urgencia: sin acentos y en minúsculas. demo: ids de servicios para la demo (uno de noche, otro de día). auditoria.perdida_estimada: fracción de consultas que se pierden por responder tarde (0.2 = 1 de cada 5). Borra esta línea al terminar.",
+  "nicho": "",
+  "ciudad": "Monterrey",
+  "nombre_demo": "",
+  "giro": "",
+  "horario": {
+    "lun": [["09:00", "19:00"]],
+    "mar": [["09:00", "19:00"]],
+    "mie": [["09:00", "19:00"]],
+    "jue": [["09:00", "19:00"]],
+    "vie": [["09:00", "19:00"]],
+    "sab": [["09:00", "14:00"]],
+    "dom": []
+  },
+  "servicios": [
+    {"id": "", "nombre": "", "precio_mxn": 0, "duracion_min": 30, "descripcion": ""},
+    {"id": "", "nombre": "", "precio_mxn": 0, "duracion_min": 30, "descripcion": ""}
+  ],
+  "faq": [
+    {"pregunta": "", "respuesta": ""}
+  ],
+  "palabras_urgencia": ["urgencia", "emergencia"],
+  "demo": {"servicio_noche": "", "servicio_dia": ""},
+  "auditoria": {
+    "mensaje_prueba": "Hola, buenas. ¿Cuánto cuesta ___ y tienen disponibilidad esta semana?",
+    "perdida_estimada": 0.2
+  }
+}

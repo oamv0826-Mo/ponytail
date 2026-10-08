@@ -41,8 +41,27 @@ origen se rechazan.
 | `verificar [--remoto]` | chequeos de instalación y salud |
 | `respaldo` | copia comprimida de la base |
 | `configurar-webhook` | dirige el webhook del número a este cliente (instalación) |
+| `prueba-real --tel <tu número> [paso]` | prueba guiada con tu teléfono contra Meta, Anthropic y Google ([docs/prueba-real.md](docs/prueba-real.md)) |
 
-Operación: [docs/runbook.md](docs/runbook.md) · Instalación: [docs/checklist-instalacion.md](docs/checklist-instalacion.md) ·
+Sin `--cliente` (herramientas de venta):
+
+| Comando | Para qué |
+|---|---|
+| `auditoria --nicho nichos/<giro>.json <carpeta>` | la primera vez crea `negocios.csv`; después genera un reporte HTML por negocio y `resumen.html` |
+| `demo-ventas --nicho nichos/<giro>.json [--rapido]` | demo de ~3 minutos para dueños, sin cuentas ([docs/demo-ventas.md](docs/demo-ventas.md)) |
+
+## Kit de venta
+
+- **Nichos:** `nichos/<giro>.json` describe un giro (servicios, precios, horario, preguntas frecuentes, palabras de
+  urgencia, mensaje de auditoría). `clinica-estetica.json` es el primero; `_plantilla.json` se copia para otro giro.
+- **Auditoría de fugas:** una fila por negocio en `negocios.csv` (se abre en Excel o Numbers). Fechas como
+  `2026-10-13 11:00`; respuesta vacía = no respondió; envío vacío = esa prueba no se hizo (el puntaje se calcula sobre
+  lo probado); sí/no en `dio_precio`, `ofrecio_agendar`, `seguimiento_2d`, `seguimiento_5d`, `contesta_resenas`,
+  `boton_whatsapp`, `horario_visible`. `consultas_mes` y `ticket_promedio` los da el dueño: con ellos el reporte
+  estima la venta en riesgo. Cada reporte muestra solo el promedio y el mejor del grupo, sin nombres.
+- **Cuentas:** [docs/arranque-cuentas.md](docs/arranque-cuentas.md), en orden, con costo y tiempo de cada una.
+
+Operación: [docs/runbook.md](docs/runbook.md) · Cuentas: [docs/arranque-cuentas.md](docs/arranque-cuentas.md) · Instalación: [docs/checklist-instalacion.md](docs/checklist-instalacion.md) ·
 Plantillas para Meta: [docs/plantillas.md](docs/plantillas.md) · Anexo de contrato: [docs/anexo-contrato.md](docs/anexo-contrato.md).
 
 ## Pruebas
