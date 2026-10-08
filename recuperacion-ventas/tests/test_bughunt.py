@@ -225,3 +225,40 @@ class Ronda5Bandeja(Caso):
         for i in range(20):
             login(f"x{i}", "mal")                                   # muchos usuarios distintos desde la misma IP
         self.assertEqual(login("luis", "clave-segura-456"), 429)    # la IP sí se bloquea a los 20
+
+
+class Ronda6CSV(Caso):
+    def importar(self, contenido, encoding="utf-8"):
+        from rv import ventas
+        ruta = self.dir / "clientes.csv"
+        ruta.write_bytes(contenido.encode(encoding))
+        return ventas.importar_clientes(self.con, self.cfg, ruta)
+
+    def test_csv_de_excel_en_windows_latin1(self):
+        r = self.importar("nombre,telefono,ultima_visita,consentimiento\nMaría Peña,8112340001,,sí\n", "cp1252")
+        self.assertEqual(r["nuevos"], 1)
+        self.assertEqual(self.contacto("+528112340001")["nombre"], "María Peña")
+
+    def test_punto_y_coma_encabezado_celular_y_fecha_mexicana(self):
+        r = self.importar("Nombre;Celular;Última visita;Consentimiento\nAna;81 1234 0002;15/03/2026;Sí\n")
+        self.assertEqual((r["nuevos"], r["rechazados"]), (1, []))
+        c = self.contacto("+528112340002")
+        self.assertEqual((c["ultima_visita"], c["consentimiento"]), ("2026-03-15", 1))
+
+    def test_prefijos_antiguos_de_mexico_y_numeros_con_cero(self):
+        n = base.normalizar_tel
+        self.assertEqual(n("044 81 1234 0005"), "+528112340005")
+        self.assertEqual(n("045 55 1234 0007"), "+525512340007")
+        self.assertEqual(n("01 81 1234 0006"), "+528112340006")
+        self.assertIsNone(n("0 81 1234 000"))
+
+    def test_ventas_csv_con_fecha_mexicana_y_columna_importe(self):
+        from ayuda import local
+        from rv import ventas
+        self.escribir("hola")
+        self.t = local(2026, 10, 7, 12, 0)
+        ruta = self.dir / "ventas.csv"
+        ruta.write_bytes("Teléfono;Fecha;Importe\n81 0000 0001;06/10/2026;$1,250.00\n".encode("cp1252"))
+        r = ventas.importar_ventas(self.con, self.cfg, ruta)
+        self.assertEqual((r["registradas"], r["rechazadas"]), (1, []))
+        self.assertEqual(self.con.execute("SELECT fecha, monto_centavos FROM venta").fetchone()[:], ("2026-10-06", 125000))

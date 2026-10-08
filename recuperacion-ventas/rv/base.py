@@ -243,9 +243,17 @@ def normalizar_tel(tel, pais="52"):
     if s.startswith("00"):
         digitos = digitos[2:]
     if len(digitos) == 10 and not s.startswith("+"):
+        if digitos.startswith("0"):   # ningún número nacional de México empieza con 0
+            return None
         digitos = pais + digitos
+    if len(digitos) == 13 and digitos[:3] in ("044", "045"):   # prefijo antiguo de celular: 044/045 + 10 dígitos
+        digitos = pais + digitos[3:]
+    elif len(digitos) == 12 and digitos.startswith("01"):       # prefijo antiguo de larga distancia: 01 + 10
+        digitos = pais + digitos[2:]
     if digitos.startswith("521") and len(digitos) == 13:
         digitos = "52" + digitos[3:]
+    if digitos.startswith("0"):
+        return None
     if digitos.startswith("52") and len(digitos) != 12:
         return None
     return "+" + digitos if 8 <= len(digitos) <= 15 else None

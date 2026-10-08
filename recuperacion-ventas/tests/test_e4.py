@@ -69,7 +69,7 @@ class Atribucion(Caso):
         self.escribir("hola")
         ruta = self.dir / "v.csv"
         ruta.write_text("telefono,fecha,monto\n8100000001,2026-10-06,800\n8100000001,2026-10-06,800\n"
-                        "8199999999,2026-10-06,500\n8100000001,06/10/2026,300\n", encoding="utf-8")
+                        "8199999999,2026-10-06,500\n8100000001,2026/13/45,300\n", encoding="utf-8")
         r = ventas.importar_ventas(self.con, self.cfg, ruta)
         self.assertEqual((r["registradas"], r["duplicadas"]), (1, 1))
         self.assertEqual([x[0] for x in r["rechazadas"]], [4, 5])

@@ -1,6 +1,6 @@
 # Ciclo autónomo de caza de errores
 
-Estado: rondas = 5 · rondas seguidas sin hallazgos = 0 · se detiene con 2 limpias seguidas o al llegar a 8.
+Estado: rondas = 6 · rondas seguidas sin hallazgos = 0 · se detiene con 2 limpias seguidas o al llegar a 8.
 
 Orden de áreas: 1 motor/guardrails IA · 2 agenda/Google · 3 tick/ventanas · 4 ventas/atribución/reporte ·
 5 bandeja/seguridad · 6 CSV/teléfonos · 7 migraciones/respaldo/caídas · 8 kit (auditoria, demo, prueba) ·
@@ -51,3 +51,14 @@ Revisado sin hallazgos: reglas de atribución contra el anexo (ventanas de 60 d�
 | 2 | Cinco fallos de una persona bloqueaban el login de toda la oficina 15 min (mismo límite por IP que por usuario; en una oficina todos salen por la misma IP). | 5 fallos por usuario (lo pedido) y 20 por IP. | `test_fallos_de_una_persona_no_bloquean_a_la_oficina` |
 
 Revisado sin hallazgos: escape de todo dato del cliente en bandeja/citas/ventas, anti-CSRF por Origin, cookies, expiración de sesión, cabeceras de seguridad, descarga de archivos (ronda 1), límites de tamaño de cuerpo.
+
+## Ronda 6 · importaciones CSV y teléfonos
+| # | Hallazgo (reproducido) | Corrección | Prueba |
+|---|---|---|---|
+| 1 | Un CSV guardado desde Excel en Windows (Windows-1252, "María Peña") hacía tronar toda la importación con UnicodeDecodeError. | `ventas.leer_csv`: UTF-8 y, si no, Windows-1252. | `test_csv_de_excel_en_windows_latin1` |
+| 2 | CSV con punto y coma: todas las filas rechazadas. | Separador detectado en el encabezado (coma, punto y coma o tab). | `test_punto_y_coma_encabezado_celular_y_fecha_mexicana` |
+| 3 | Encabezados comunes ("Celular", "WhatsApp", "Tel", "Importe", "Última visita") no se reconocían: todas las filas rechazadas. | Alias de columnas. | (misma prueba) y `test_ventas_csv_con_fecha_mexicana_y_columna_importe` |
+| 4 | Fechas DD/MM/AAAA (como las guarda Excel en México) rechazaban la fila completa y el contacto se perdía. | Se aceptan AAAA-MM-DD y DD/MM/AAAA (clientes y ventas). | (mismas pruebas) |
+| 5 | Teléfonos con prefijos antiguos 044/045/01 o de 10 dígitos con 0 inicial se aceptaban como números inválidos (+044…, +01…, +5208…). | 044/045 + 10 y 01 + 10 se convierten a +52 + 10; cualquier número que quede con 0 inicial se rechaza. | `test_prefijos_antiguos_de_mexico_y_numeros_con_cero` |
+
+Prueba existente actualizada: `test_e4.Atribucion.test_importar_ventas` usaba "06/10/2026" como fecha inválida; ahora es válida a propósito y se usa "2026/13/45".
