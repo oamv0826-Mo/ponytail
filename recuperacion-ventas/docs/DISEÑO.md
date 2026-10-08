@@ -316,3 +316,29 @@ Google: `ocupado_externo` → `ocupados/restar/horarios_libres` (sin cambios) y 
 | Listar mensajes no leídos, `Prefer: outlook.body-content-type` | [user-list-messages](https://learn.microsoft.com/graph/api/user-list-messages) |
 | `/reply` contesta al `replyTo` del original (por eso no se usa) | [message-reply](https://learn.microsoft.com/en-us/graph/api/message-reply) |
 | IMAP de Gmail `imap.gmail.com:993` | [guía Gmail IMAP/SMTP](https://smtpedia.com/gmail) (fuente secundaria) |
+
+### 7.5 Pagos en línea (fase 5)
+
+`rv/pagos.py`. Rutas `POST /pagos/stripe` y `POST /pagos/mercadopago` (sin sesión ni Origin: las firma el proveedor).
+Verificar firma → encolar en `entrada` → 200; el trabajador procesa como cualquier otro item.
+
+- **Stripe**: `Stripe-Signature: t=…,v1=…`, HMAC-SHA256 de `"<t>." + cuerpo crudo` con el secreto `whsec_…`; acepta
+  varias `v1` (rotación del secreto); primero la firma y después la antigüedad (máximo 5 min). Solo
+  `checkout.session.completed` con `payment_status=paid`; monto `amount_total` (centavos), cliente en
+  `customer_details.phone/email`. Clave de cola `p:stripe:<evento>`: un reenvío no duplica.
+- **Mercado Pago**: `x-signature: ts=…,v1=…`, HMAC-SHA256 de `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`
+  (omitiendo lo que falte; `data.id` en minúsculas). El aviso solo trae el id: el trabajador consulta
+  `GET /v1/payments/{id}` con `MP_ACCESS_TOKEN`; cuenta si `status=approved`. Cada aviso se revisa (creado,
+  actualizado); la venta no se duplica por la regla de `registrar_venta` (mismo contacto, fecha y monto).
+- Solo MXN. Cliente por teléfono (normalizado a E.164) o por `contacto.email`; la venta se registra con
+  `ventas.registrar_venta` (misma atribución y garantía) y `registrado_por = pago:<proveedor>:<id>`. Sin cliente:
+  `pagos-sin-contacto.csv`, compatible con `importar-ventas`.
+- Reembolsos: no se descuentan solos (el reporte cuenta ventas registradas); se corrigen a mano.
+- **Clip**: no se encontró documentación pública de webhooks de pagos (un hilo de su foro pregunta lo mismo sin
+  respuesta); sus ventas entran por `importar-ventas`.
+
+| Qué | Documentación |
+|---|---|
+| Firma de Stripe (`t`, `v1`, cuerpo crudo, tolerancia) | [webhooks/signature](https://docs.stripe.com/webhooks/signature) |
+| Firma de Mercado Pago (plantilla `id;request-id;ts`) | [notificaciones webhooks](https://www.mercadopago.com/developers/es/docs/your-integrations/notifications/webhooks) |
+| Clip: sin webhooks de links documentados | [foro de Clip](https://developer.clip.mx/discuss/6954a96a2055efb9cdac5fae) |

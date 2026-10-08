@@ -298,3 +298,109 @@ class CanalCorreo(ConCorreo):
 def agenda_dt():
     import datetime
     return datetime
+
+
+class Pagos(Caso):
+    CONFIG = {"pagos": {"stripe": {"activo": True}, "mercadopago": {"activo": True}}}
+
+    def setUp(self):
+        super().setUp()
+        os.environ.update(STRIPE_WEBHOOK_SECRET="whsec_prueba", MP_WEBHOOK_SECRET="mp_secreto", MP_ACCESS_TOKEN="APP_USR-x")
+        self.cid = self.con.execute("INSERT INTO contacto (telefono, wa_id, nombre, creado) VALUES "
+                                    "('+528100000001', '528100000001', 'Ana', ?)", (base.iso(self.t),)).lastrowid
+
+    def stripe(self, telefono="+52 81 0000 0001", monto=125050, estado="paid", moneda="mxn", tipo="checkout.session.completed"):
+        from rv import pagos
+        evento = {"id": f"evt_{monto}{telefono[-2:]}", "type": tipo, "data": {"object": {
+            "id": "cs_1", "payment_status": estado, "amount_total": monto, "currency": moneda,
+            "created": int(self.t.timestamp()), "customer_details": {"phone": telefono, "email": "ana@gmail.com", "name": "Ana"}}}}
+        cuerpo = json.dumps(evento).encode()
+        t = str(int(self.t.timestamp()))
+        firma = f"t={t},v1={pagos._hmac('whsec_prueba', t.encode() + b'.' + cuerpo)}"
+        return cuerpo, firma
+
+    def test_firma_de_stripe(self):
+        from rv import pagos
+        cuerpo, firma = self.stripe()
+        ahora = self.t.timestamp()
+        self.assertTrue(pagos.firma_stripe_valida(cuerpo, firma, "whsec_prueba", ahora))
+        self.assertTrue(pagos.firma_stripe_valida(cuerpo, firma.replace(",v1=", ",v1=viejo,v1="), "whsec_prueba", ahora))
+        self.assertFalse(pagos.firma_stripe_valida(cuerpo + b" ", firma, "whsec_prueba", ahora))
+        self.assertFalse(pagos.firma_stripe_valida(cuerpo, firma, "otro", ahora))
+        self.assertFalse(pagos.firma_stripe_valida(cuerpo, firma, "whsec_prueba", ahora + 301))   # reenvío viejo
+        self.assertFalse(pagos.firma_stripe_valida(cuerpo, "t=abc,v1=x", "whsec_prueba", ahora))
+        self.assertFalse(pagos.firma_stripe_valida(cuerpo, firma, "", ahora))
+
+    def test_firma_de_mercado_pago(self):
+        from rv import pagos
+        plantilla = b"id:abc123;request-id:req-1;ts:1742505638683;"
+        firma = f"ts=1742505638683,v1={pagos._hmac('mp_secreto', plantilla)}"
+        self.assertTrue(pagos.firma_mercadopago_valida(firma, "req-1", "ABC123", "mp_secreto"))   # id en minúsculas
+        self.assertFalse(pagos.firma_mercadopago_valida(firma, "req-2", "ABC123", "mp_secreto"))
+        self.assertFalse(pagos.firma_mercadopago_valida(firma, "req-1", "ABC123", ""))
+        sin_request = f"ts=1,v1={pagos._hmac('mp_secreto', b'id:9;ts:1;')}"
+        self.assertTrue(pagos.firma_mercadopago_valida(sin_request, None, "9", "mp_secreto"))   # se omite lo que falta
+
+    def venta(self):
+        return self.con.execute("SELECT * FROM venta").fetchall()
+
+    def test_stripe_por_http_registra_la_venta(self):
+        import http.client
+        import socket
+        import threading
+        from rv import web
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            puerto = s.getsockname()[1]
+        srv = web.crear_servidor(self.cfg, puerto=puerto)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        cuerpo, firma = self.stripe()
+        for f, esperado in ((firma.replace("v1=", "v1=0"), 401), (firma, 200), (firma, 200)):   # inválida, válida, repetida
+            h = http.client.HTTPConnection("127.0.0.1", puerto, timeout=5)
+            h.request("POST", "/pagos/stripe", body=cuerpo, headers={"Stripe-Signature": f, "Content-Type": "application/json"})
+            self.assertEqual(h.getresponse().status, esperado)
+        motor.procesar_pendientes(self.con, self.cfg)
+        [v] = self.venta()
+        self.assertEqual((v["contacto_id"], v["monto_centavos"], v["registrado_por"]), (self.cid, 125050, "pago:stripe:cs_1"))
+
+    def test_stripe_sin_pagar_otra_moneda_u_otro_evento_no_cuentan(self):
+        from rv import pagos
+        for kw in ({"estado": "unpaid"}, {"moneda": "usd"}):
+            cuerpo, firma = self.stripe(**kw)
+            self.assertEqual(pagos.recibir(self.con, self.cfg, "stripe", cuerpo, {"Stripe-Signature": firma}, {})[0], 200)
+        cuerpo, firma = self.stripe(tipo="charge.refunded")
+        self.assertEqual(pagos.recibir(self.con, self.cfg, "stripe", cuerpo, {"Stripe-Signature": firma}, {}),
+                         (200, "evento ignorado"))
+        motor.procesar_pendientes(self.con, self.cfg)
+        self.assertEqual(self.venta(), [])
+        self.cfg["pagos"]["stripe"]["activo"] = False
+        self.assertEqual(pagos.recibir(self.con, self.cfg, "stripe", cuerpo, {"Stripe-Signature": firma}, {})[0], 404)
+
+    def test_pago_de_quien_no_es_cliente_queda_en_csv_para_importar(self):
+        from rv import pagos
+        cuerpo, firma = self.stripe(telefono="+52 55 9999 0000")
+        pagos.recibir(self.con, self.cfg, "stripe", cuerpo, {"Stripe-Signature": firma}, {})
+        motor.procesar_pendientes(self.con, self.cfg)
+        self.assertEqual(self.venta(), [])
+        lineas = (self.dir / "pagos-sin-contacto.csv").read_text().splitlines()
+        self.assertEqual(lineas[0], "telefono,fecha,monto,email,nombre,proveedor,pago")
+        self.assertEqual(lineas[1].split(",")[:3], ["+525599990000", "2026-10-06", "1250.50"])
+
+    def test_mercado_pago_consulta_el_pago_y_busca_por_correo(self):
+        from rv import pagos
+        self.con.execute("UPDATE contacto SET email='ana@gmail.com' WHERE id=?", (self.cid,))
+        firma = f"ts=1,v1={pagos._hmac('mp_secreto', b'id:777;request-id:r1;ts:1;')}"
+        cab = {"x-signature": firma, "x-request-id": "r1"}
+        self.assertEqual(pagos.recibir(self.con, self.cfg, "mercadopago", b"{}", cab, {"data.id": ["777"], "type": ["payment"]}),
+                         (200, "ok"))
+        pago = {"id": 777, "status": "approved", "transaction_amount": 980.0, "currency_id": "MXN",
+                "date_approved": "2026-10-06T09:30:00.000-06:00", "payer": {"email": "Ana@Gmail.com", "phone": {}}}
+        with mock.patch.object(pagos, "pago_mercadopago", return_value=pago) as consulta:
+            motor.procesar_pendientes(self.con, self.cfg)
+        consulta.assert_called_once_with("777")
+        [v] = self.venta()
+        self.assertEqual((v["contacto_id"], v["monto_centavos"], v["fecha"]), (self.cid, 98000, "2026-10-06"))
+        self.assertEqual(pagos.recibir(self.con, self.cfg, "mercadopago", b"{}", cab | {"x-request-id": "otro"},
+                                       {"data.id": ["777"], "type": ["payment"]})[0], 401)

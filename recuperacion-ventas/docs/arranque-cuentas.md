@@ -24,6 +24,7 @@ parecido. Los tiempos son aproximados.
 | 8 | Respaldo externo con rclone | Gratis hasta 10 GB | 20 min | **Solo cuando tengas el primer cliente** |
 | 9 | Correo para avisos y reporte (opcional) | Gratis con Gmail; Microsoft 365 ya pagado por el negocio | 15 a 30 min | bloque `email` → `cliente.json`; `SMTP_CLAVE` o `MS_*` → `secretos.env` |
 | 10 | Calendario de Microsoft 365 (en vez de Google, si el negocio usa Outlook) | Lo que el negocio ya paga | 20 min | `agenda` → `cliente.json`; `MS_*` → `secretos.env` |
+| 11 | Pagos en línea que registran la venta solos (opcional) | Stripe o Mercado Pago cobran su comisión por venta; conectar es gratis | 20 min | bloque `pagos` → `cliente.json`; `STRIPE_WEBHOOK_SECRET` / `MP_WEBHOOK_SECRET`, `MP_ACCESS_TOKEN` → `secretos.env` |
 
 Con los pasos 1 a 6 ya puedes hacer la prueba real desde tu Mac ([prueba-real.md](prueba-real.md)).
 
@@ -292,6 +293,38 @@ buzón).
 
 `verificar --remoto` revisa que el token traiga `Calendars.ReadWrite` y lee la disponibilidad de mañana. Las citas
 aparecen en el Outlook de quien tenga acceso a ese buzón.
+
+---
+
+## 11. Pagos en línea que registran la venta solos (opcional)
+
+**Costo:** conectar es gratis; Stripe y Mercado Pago cobran su comisión de siempre por cada cobro. **Tiempo:** 20 min.
+Lo hace el dueño desde su propia cuenta. Cuando un cliente paga, Agorá busca al cliente por teléfono o correo y
+registra la venta con la misma atribución que una venta capturada a mano. Si no lo encuentra, la deja en
+`pagos-sin-contacto.csv` (columnas `telefono,fecha,monto,...`): corrige el teléfono y cárgala con `importar-ventas`.
+
+**Stripe** (links de pago o Checkout):
+1. En los links de pago, activa **Recopilar el número de teléfono** del cliente: es lo que permite encontrarlo.
+2. **Desarrolladores → Webhooks → Agregar destino**: URL `https://<url_publica>/pagos/stripe`, evento
+   **`checkout.session.completed`** (solo ese: si agregas también `charge.succeeded`, el mismo cobro llega dos veces).
+3. Copia el **secreto de firma** (`whsec_...`) → `secretos.env` como `STRIPE_WEBHOOK_SECRET=...`.
+4. Prueba: "Enviar evento de prueba" desde el panel; en el log de Agorá debe verse procesado.
+
+**Mercado Pago:**
+1. <https://www.mercadopago.com.mx/developers/panel> → **Tus integraciones** → crea una aplicación.
+2. **Webhooks → Configurar notificaciones**: URL `https://<url_publica>/pagos/mercadopago`, evento **Pagos**, en modo
+   productivo. Guarda y copia la **clave secreta** → `MP_WEBHOOK_SECRET=...`.
+3. **Credenciales de producción → Access Token** (`APP_USR-...`) → `MP_ACCESS_TOKEN=...`. Agorá lo usa solo para
+   leer el pago que le avisaron (monto, estado y correo del pagador).
+
+**Clip:** no tiene webhooks de pagos documentados para links o terminal. Exporta las ventas del panel de Clip y
+cárgalas con `importar-ventas` (columnas `telefono,fecha,monto`).
+
+```json
+"pagos": {"stripe": {"activo": true}, "mercadopago": {"activo": false}}
+```
+
+`verificar` muestra la URL de cada webhook y `verificar --remoto` valida el token de Mercado Pago (solo lectura).
 
 ---
 

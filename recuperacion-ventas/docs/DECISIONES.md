@@ -186,3 +186,9 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - Correo entrante: el bot solo contesta si el remitente pasa DMARC según el encabezado de NUESTRO servidor (el primero, y por IMAP con su id); si no, pasa a humano sin respuesta. Evita que un "From" falsificado cancele citas ajenas o use al bot para mandar correo a terceros. Costo: dominios sin DMARC los atiende una persona.
 - Las respuestas por correo van siempre a la dirección guardada; con Microsoft se usa sendMail y no /reply porque /reply obedece el Reply-To, que lo escribe el remitente.
 - HTML de correo a texto con `html.parser` y tope de 100 KB en vez de una expresión regular (la revisión de seguridad mostró que la regex podía tardar muchísimo con HTML malicioso); un correo ilegible se marca leído y no bloquea la cola.
+- Pagos de Stripe y Mercado Pago entran por la misma cola que WhatsApp: el webhook solo verifica la firma y encola (responde rápido; el proveedor reintenta si no hay 200) y el trabajador registra la venta con la atribución existente.
+- Stripe: solo `checkout.session.completed` (links de pago y Checkout traen el teléfono del cliente si se pide); escuchar también `charge.succeeded` duplicaría el cobro.
+- Un pago sin cliente reconocible no se pierde ni se adivina: queda en `pagos-sin-contacto.csv`, que `importar-ventas` acepta tal cual tras corregir el teléfono.
+- Solo se registran pagos en MXN y aprobados; los reembolsos no se restan solos (no hay borrado de ventas y la garantía se revisa con el dueño cada mes).
+- La tolerancia de 5 min de la firma de Stripe usa el reloj del sistema (`base.ahora`), el mismo que el resto.
+- Clip queda por CSV: no hay webhooks de pagos documentados.

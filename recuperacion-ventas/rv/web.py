@@ -12,7 +12,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, urlparse
 
-from . import agenda, base, motor, ventas, wa
+from . import agenda, base, motor, pagos, ventas, wa
 
 MAX_WEBHOOK = 1_000_000
 MAX_FORM = 64_000
@@ -375,6 +375,17 @@ def crear_servidor(cfg, host="127.0.0.1", puerto=None):
                 with base.db(cfg) as con:
                     codigo, _ = recibir_webhook(con, cfg, cuerpo, self.headers.get("X-Hub-Signature-256"))
                 self.enviar(codigo, "ok" if codigo == 200 else "", "text/plain")
+                if codigo == 200:
+                    despertar.set()
+                return
+            if u.path in ("/pagos/stripe", "/pagos/mercadopago"):   # firmados por el proveedor, sin sesión
+                try:
+                    cuerpo = self.leer(MAX_WEBHOOK)
+                except ValueError:
+                    return self.enviar(413)
+                with base.db(cfg) as con:
+                    codigo, motivo = pagos.recibir(con, cfg, u.path.rsplit("/", 1)[1], cuerpo, self.headers, parse_qs(u.query))
+                self.enviar(codigo, motivo, "text/plain")
                 if codigo == 200:
                     despertar.set()
                 return
