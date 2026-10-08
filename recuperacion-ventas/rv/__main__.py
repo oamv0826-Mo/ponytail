@@ -31,7 +31,7 @@ def simular_correo(cfg, args, texto):
     if not correo.configurado(cfg):
         sys.exit("para simular el canal de correo pon en cliente.json email.proveedor (smtp o microsoft) y email.remitente")
     item = correo._item(cfg, args.de, args.nombre, args.asunto, make_msgid(domain="simulado.mx"), texto,
-                        base.iso(base.ahora()))
+                        base.iso(base.ahora()), autenticacion="simulado; dmarc=pass")
     with base.db(cfg) as con:
         ultimo = con.execute("SELECT COALESCE(MAX(id),0) FROM mensaje").fetchone()[0]
         motor.encolar_correo(con, item)

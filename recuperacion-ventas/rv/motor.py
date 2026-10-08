@@ -8,6 +8,7 @@ MOTIVOS = {
     "urgencia_medica": "posible urgencia médica",
     "no_texto": "mandó un mensaje que no es texto",
     "tope_ia": "se alcanzó el tope mensual de IA",
+    "correo_sin_verificar": "correo sin verificar (DMARC): podría ser suplantado; el bot no contestó",
     "ia_error": "la IA no pudo responder",
     "sin_horarios": "no hay horarios disponibles en línea",
     "escalamiento": "sigue sin respuesta del equipo",
@@ -68,13 +69,16 @@ def avisar_equipo(con, cfg, c, motivo, solo_dueno=False):
                       wa.texto_plantilla("aviso_equipo", params))
 
 
-def handoff(con, cfg, cid, motivo, urgente=False):
+def handoff(con, cfg, cid, motivo, urgente=False, silencioso=False):
+    """silencioso: no se le contesta al cliente (correo sin verificar: contestar sería mandar correo a un tercero)."""
     t = base.ahora()
     con.execute("UPDATE contacto SET estado='humano', handoff_desde=?, handoff_motivo=?, seg_activo=0, "
                 "propuesta=NULL, escalado=NULL, asignado_a=NULL WHERE id=?", (base.iso(t), motivo, cid))
     base.evento(con, cid, "handoff", motivo)
     c = contacto(con, cid)
-    if base.abierto(cfg, t):
+    if silencioso:
+        pass
+    elif base.abierto(cfg, t):
         responder(con, cfg, c, cfg.msg["handoff_abierto"])
     else:
         responder(con, cfg, c, cfg.msg["handoff_cerrado"].format(apertura=base.apertura_humana(cfg, t)))
@@ -128,6 +132,9 @@ def procesar_item(con, cfg, item, reintento=False):
         actualizar_estado(con, item["estado"])
     elif item["tipo"] == "correo":
         procesar_correo(con, cfg, item, reintento)
+    elif item["tipo"] == "pago":
+        from . import pagos  # import diferido: pagos → ventas → motor
+        pagos.procesar(con, cfg, item)
     else:
         procesar_mensaje(con, cfg, item, reintento)
 
@@ -227,6 +234,9 @@ def procesar_correo(con, cfg, item, reintento=False):
     if r is None:
         return
     c, texto = r
+    if not item.get("verificado"):   # posible suplantación: lo ve una persona en la bandeja, el bot no actúa
+        handoff(con, cfg, c["id"], "correo_sin_verificar", silencioso=True)
+        return
     try:
         atender(con, cfg, c, texto)
     except Exception as e:  # misma red de seguridad que WhatsApp

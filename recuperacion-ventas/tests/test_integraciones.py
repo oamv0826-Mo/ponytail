@@ -145,7 +145,8 @@ class CalendarioMicrosoft(Caso):
             self.cfg.validar()
 
 
-CORREO_CLIENTE = (b"From: Ana Ruiz <ana@gmail.com>\r\nTo: citas@clinica.mx\r\nSubject: Precio\r\n"
+CORREO_CLIENTE = (b"Authentication-Results: mx.google.com; dkim=pass header.i=@gmail.com; spf=pass; dmarc=pass "
+                  b"(p=NONE) header.from=gmail.com\r\nFrom: Ana Ruiz <ana@gmail.com>\r\nTo: citas@clinica.mx\r\nSubject: Precio\r\n"
                   b"Message-ID: <abc123@mail.gmail.com>\r\nDate: Tue, 06 Oct 2026 09:58:00 -0600\r\n"
                   b"MIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary=XX\r\n\r\n"
                   b"--XX\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
@@ -179,9 +180,32 @@ class CanalCorreo(ConCorreo):
         motor.procesar_pendientes(self.con, self.cfg)
         return n, imap, orden
 
+    def test_correo_sin_dmarc_no_lo_contesta_el_bot(self):
+        sin = CORREO_CLIENTE.split(b"\r\n", 1)[1].replace(b"Subject: Precio", b"Subject: cancelar mi cita")
+        falso = b"Authentication-Results: mx.google.com; dmarc=pass\r\n"
+        casos = (sin,                                                                    # sin encabezado
+                 b"Authentication-Results: mx.google.com; dmarc=fail\r\n" + falso + sin,  # el falso va abajo
+                 falso.replace(b"mx.google.com", b"otro.mx") + sin)                       # no es de nuestro servidor
+        for crudo in casos:
+            self.assertFalse(correo.de_mime(self.cfg, crudo)["verificado"])
+        self.leer([sin])
+        c = self.con.execute("SELECT * FROM contacto WHERE email='ana@gmail.com'").fetchone()
+        self.assertEqual((c["estado"], c["handoff_motivo"]), ("humano", "correo_sin_verificar"))
+        self.assertNotIn("correo:ana@gmail.com", self.log())   # nada al remitente (podría ser un tercero)
+        self.assertIn("correo sin verificar", self.log())      # el equipo sí se entera
+
+    def test_un_correo_ilegible_no_bloquea_a_los_demas(self):
+        with mock.patch.object(correo, "de_mime", side_effect=[LookupError("charset raro"),
+                                                               correo.de_mime(self.cfg, CORREO_CLIENTE)]):
+            n, imap, _ = self.leer([b"basura", CORREO_CLIENTE])
+        self.assertEqual(n, 2)
+        self.assertEqual([c.args[0] for c in imap.uid.call_args_list].count("STORE"), 2)
+        self.assertIn("correo:ana@gmail.com", self.log())
+
     def test_texto_util_quita_html_cita_y_firma(self):
         self.assertEqual(correo.texto_util("Hola\n\nOn Mon, Ana wrote:\n> viejo"), "Hola")
         self.assertEqual(correo.texto_util("<p>Hola &amp; gracias</p><style>p{}</style>", es_html=True), "Hola & gracias")
+        self.assertEqual(correo.texto_util("<script>" * 50000 + "hola", es_html=True), "")   # sin cuelgue: parser, no regex
         self.assertEqual(correo.texto_util("Quiero cita\n-- \nAna Ruiz\nGerente"), "Quiero cita")
 
     def test_no_contesta_robots_listas_ni_al_propio_buzon(self):
@@ -223,7 +247,9 @@ class CanalCorreo(ConCorreo):
         self.cfg["email"]["proveedor"] = "microsoft"
         g = {"id": "AAMk1", "internetMessageId": "<m1@outlook.com>", "subject": "Cita", "receivedDateTime":
              "2026-10-06T15:58:00Z", "from": {"emailAddress": {"name": "Luis", "address": "Luis@Outlook.com"}},
-             "body": {"contentType": "text", "content": "Quiero hablar con una persona"}, "internetMessageHeaders": []}
+             "body": {"contentType": "text", "content": "Quiero hablar con una persona"}, "internetMessageHeaders": [
+                 {"name": "Authentication-Results", "value": "spf=pass; dkim=pass; dmarc=pass action=none"},
+                 {"name": "Reply-To", "value": "atacante@x.mx"}]}
         with mock.patch.object(ms, "graph", return_value={"value": [g]}) as graph:
             correo.leer_entrada(self.cfg, lambda item: motor.encolar_correo(self.con, item))
         get, patch = graph.call_args_list
@@ -236,8 +262,9 @@ class CanalCorreo(ConCorreo):
             motor.procesar_pendientes(self.con, self.cfg)
         c = self.con.execute("SELECT * FROM contacto WHERE email='luis@outlook.com'").fetchone()
         self.assertEqual(c["estado"], "humano")
-        reply = [x for x in graph.call_args_list if x.args[1].endswith("/reply")]
-        self.assertEqual(reply[0].args[1], "users/citas@clinica.mx/messages/AAMk1/reply")
+        envio = [x for x in graph.call_args_list if x.args[1].endswith("/sendMail")][0]   # nunca /reply: usa el Reply-To
+        self.assertEqual(envio.args[2]["message"]["toRecipients"], [{"emailAddress": {"address": "luis@outlook.com"}}])
+        self.assertEqual(envio.args[2]["message"]["subject"], "Re: Cita")
 
     def test_recordatorio_si_seguimiento_no(self):
         from rv import tick

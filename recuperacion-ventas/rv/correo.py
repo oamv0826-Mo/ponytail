@@ -2,7 +2,7 @@
 Por SMTP/IMAP (Gmail, Zoho, hosting) o por Microsoft Graph (Microsoft 365). En modo prueba no sale nada."""
 import email
 import email.policy
-import html
+import html.parser
 import imaplib
 import json
 import os
@@ -85,15 +85,37 @@ def enviar(cfg, para, asunto, texto, responde_a=None):
 # ---------- canal de clientes: correo entrante ----------
 
 MAX_TEXTO = 4000
+MAX_CRUDO = 100_000   # un correo enorme o malicioso no llega entero al parser ni a las expresiones regulares
 NO_RESPONDER = re.compile(r"(no-?reply|noreply|mailer-daemon|postmaster|bounce|notificaciones?|notifications?)@", re.I)
 CITA = re.compile(r"^(?:El .{0,200}escribi[óo]:|On .{0,200}wrote:|-{2,}\s*(?:Original Message|Mensaje original)\s*-{2,}"
                   r"|De: .+|From: .+)\s*$", re.M | re.I)
 
 
+class _SoloTexto(html.parser.HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.partes, self.saltar = [], 0
+
+    def handle_starttag(self, tag, attrs):
+        self.saltar += tag in ("script", "style")
+        if tag in ("br", "p", "div", "li", "tr"):
+            self.partes.append("\n")
+
+    def handle_endtag(self, tag):
+        self.saltar -= tag in ("script", "style") and self.saltar > 0
+
+    def handle_data(self, data):
+        if not self.saltar:
+            self.partes.append(data)
+
+
 def texto_util(cuerpo, es_html=False):
     """Lo que escribió el cliente: sin HTML, sin el historial citado ni la firma de '--'."""
+    cuerpo = cuerpo[:MAX_CRUDO]
     if es_html:
-        cuerpo = html.unescape(re.sub(r"<(script|style)\b.*?</\1>|<[^>]+>", " ", cuerpo, flags=re.S | re.I))
+        p = _SoloTexto()
+        p.feed(cuerpo)
+        cuerpo = "".join(p.partes)
     m = CITA.search(cuerpo)
     cuerpo = cuerpo[:m.start()] if m else cuerpo
     lineas = [x for x in cuerpo.splitlines() if not x.lstrip().startswith(">")]
@@ -119,12 +141,33 @@ def ignorar(cfg, de, cabeceras):
     return None
 
 
-def _item(cfg, de, nombre, asunto, msg_id, texto, fecha, graph_id=None, cabeceras=None):
+SERVIDORES_AUTENTICACION = {"imap.gmail.com": "mx.google.com"}
+
+
+def servidor_autenticacion(cfg):
+    e = cfg["email"]["entrada"]
+    return e.get("servidor_autenticacion") or SERVIDORES_AUTENTICACION.get(e["imap"]["host"].lower(), "")
+
+
+def verificado(autenticacion, servidor=None):
+    """El remitente es quien dice ser: DMARC aprobado en el Authentication-Results que agregó NUESTRO servidor de
+    correo (el primero, arriba de todo; los de más abajo los pudo escribir cualquiera). Por IMAP además debe traer
+    el id de nuestro servidor (Gmail: mx.google.com): si el servidor no agrega el suyo, el primero sería el del
+    remitente. Sin esto, cualquiera escribe "From: cliente@gmail.com" y cancela su cita o hace que el bot le
+    conteste a un tercero."""
+    a = (autenticacion or "").strip()
+    if servidor is not None and (not servidor or not a.lower().startswith(servidor.lower())):
+        return False
+    return bool(re.search(r"\bdmarc=pass\b", a, re.I))
+
+
+def _item(cfg, de, nombre, asunto, msg_id, texto, fecha, graph_id=None, cabeceras=None, autenticacion=None,
+          servidor=None):
     de = (de or "").strip().lower()
     motivo = ignorar(cfg, de, cabeceras or {})
     return {"tipo": "correo", "de": de, "nombre": nombre or "", "asunto": " ".join((asunto or "").split())[:200],
             "id": msg_id or f"<sin-id-{graph_id or fecha}>", "texto": texto, "fecha": fecha, "graph_id": graph_id,
-            "ignorar": motivo}
+            "ignorar": motivo, "verificado": verificado(autenticacion, servidor)}
 
 
 def de_mime(cfg, crudo):
@@ -138,17 +181,20 @@ def de_mime(cfg, crudo):
     except (TypeError, ValueError):
         fecha = base.ahora()
     return _item(cfg, de, nombre, m.get("Subject", ""), (m.get("Message-ID") or "").strip(), texto, base.iso(fecha),
-                 cabeceras=dict(m.items()))
+                 cabeceras=dict(m.items()), autenticacion=(m.get_all("Authentication-Results") or [""])[0],
+                 servidor=servidor_autenticacion(cfg))
 
 
 def de_graph(cfg, g):
     """Mensaje de Microsoft Graph (cuerpo pedido como texto) → item para la cola."""
     remitente = (g.get("from") or {}).get("emailAddress", {})
-    cab = {h["name"]: h["value"] for h in g.get("internetMessageHeaders") or []}
+    lista = g.get("internetMessageHeaders") or []
+    cab = {h["name"]: h["value"] for h in lista}
+    autenticacion = next((h["value"] for h in lista if h["name"].lower() == "authentication-results"), "")
     fecha = base.de_iso((g.get("receivedDateTime") or "")[:19] + "Z") or base.ahora()
     return _item(cfg, remitente.get("address"), remitente.get("name"), g.get("subject"), g.get("internetMessageId"),
                  texto_util(g.get("body", {}).get("content", ""), g.get("body", {}).get("contentType") == "html"),
-                 base.iso(fecha), graph_id=g["id"], cabeceras=cab)
+                 base.iso(fecha), graph_id=g["id"], cabeceras=cab, autenticacion=autenticacion)
 
 
 def leer_entrada(cfg, guardar):
@@ -172,7 +218,13 @@ def leer_entrada(cfg, guardar):
         uids = con.uid("SEARCH", None, "UNSEEN")[1][0].split()[:n]
         for uid in uids:
             datos = con.uid("FETCH", uid, "(BODY.PEEK[])")[1]   # PEEK: no lo marca leído todavía
-            guardar(de_mime(cfg, next(x[1] for x in datos if isinstance(x, tuple))))
+            try:
+                item = de_mime(cfg, next(x[1] for x in datos if isinstance(x, tuple)))
+            except Exception as e:   # un correo ilegible no bloquea a los demás: se registra y se marca leído
+                base.log("correo ilegible", uid, repr(e))
+                item = None
+            if item:
+                guardar(item)   # si falla la base, se lanza y el correo queda sin leer para el siguiente tick
             con.uid("STORE", uid, "+FLAGS", "(\\Seen)")
         return len(uids)
     finally:
@@ -187,12 +239,6 @@ def responder(cfg, c, texto):
     hilo = json.loads(c["email_hilo"] or "{}")
     asunto = hilo.get("asunto") or f"Tu mensaje a {cfg['nombre']}"
     asunto = asunto if asunto.lower().startswith(("re:", "rv:")) else f"Re: {asunto}"
-    if cfg["email"]["proveedor"] == "microsoft" and hilo.get("graph_id") and not cfg["modo_prueba"]:
-        try:   # reply de Graph conserva el hilo (Graph no deja fijar In-Reply-To en sendMail)
-            ms.graph("POST", ms.buzon(cfg["email"]["remitente"]) + f"/messages/{hilo['graph_id']}/reply",
-                     {"comment": texto})
-            return None, None   # 202 sin cuerpo: Graph no devuelve el id del mensaje enviado
-        except ms.MSError as e:
-            base.log("correo fallido", c["email"], repr(e))
-            return None, str(e)
+    # Siempre a la dirección guardada (nunca a un Reply-To del correo, que lo escribe el remitente). Con Microsoft
+    # tampoco se usa /reply de Graph: contesta al Reply-To. El hilo se mantiene por asunto e In-Reply-To (SMTP).
     return enviar(cfg, [c["email"]], asunto, texto, responde_a=hilo.get("id"))

@@ -292,12 +292,19 @@ Google: `ocupado_externo` → `ocupados/restar/horarios_libres` (sin cambios) y 
 - **Qué se ignora** (`correo.ignorar`): el propio buzón y los correos del equipo (`avisos_a`, `reporte_a`),
   `no-reply`/`mailer-daemon`, `Auto-Submitted` distinto de `no`, `X-Autoreply`, `Precedence: bulk/list/junk`,
   `List-Id`/`List-Unsubscribe`. Así no hay bucles con respuestas automáticas ni se le contesta a boletines.
-- **Texto**: la parte `text/plain` (o el HTML sin etiquetas), sin el historial citado (`El … escribió:`,
+- **Remitente verificado**: el bot solo actúa si el `Authentication-Results` que agregó nuestro servidor (el primero;
+  por IMAP además con su id, Gmail = `mx.google.com`, o `email.entrada.servidor_autenticacion`) dice `dmarc=pass`.
+  Si no, el correo pasa a una persona sin contestarle nada al remitente: un "From:" falsificado no puede cancelar la
+  cita de otro ni hacer que el bot le escriba a un tercero (backscatter). La respuesta va siempre a la dirección
+  guardada, nunca a un `Reply-To` (por eso con Microsoft se usa `sendMail` y no `/reply`, que obedece el Reply-To).
+- **Texto**: la parte `text/plain` (o el HTML sin etiquetas, con `html.parser` y máximo 100 KB: sin expresiones
+  regulares que se cuelguen con HTML malicioso), sin el historial citado (`El … escribió:`,
   `On … wrote:`, líneas `>`) ni la firma (`-- `), máximo 4000 caracteres. Un correo vacío usa el asunto.
 - **Contacto**: su `telefono` es la dirección (única, minúsculas) y `email` la misma (esquema v7); `email_hilo` guarda el
   último `Message-ID`, asunto e id de Graph. Una persona que escribe por WhatsApp y por correo son dos contactos.
-- **Respuesta** (`motor.responder` decide el canal): SMTP con `Re: <asunto>`, `In-Reply-To` y `References`; Microsoft
-  con `POST /messages/{id}/reply` (Graph no deja fijar `In-Reply-To` en `sendMail`). Se guarda como mensaje saliente.
+- **Respuesta** (`motor.responder` decide el canal): `Re: <asunto>` a la dirección guardada; por SMTP con
+  `In-Reply-To` y `References`; con Microsoft por `sendMail` (el hilo se arma por asunto). Se guarda como mensaje saliente.
+  Un correo ilegible se registra y se marca leído para no bloquear a los siguientes.
   Por correo no hay ventana de 24 h: la bandeja siempre deja responder.
 - **Mismo motor**: bajas, urgencia médica, handoff, IA con guardrails, agenda y tope de costo. Proactivos: solo el
   recordatorio de cita sale por correo (es transaccional y evita inasistencias); seguimiento, reactivación y reseñas
@@ -307,5 +314,5 @@ Google: `ocupado_externo` → `ocupados/restar/horarios_libres` (sin cambios) y 
 | Qué | Documentación |
 |---|---|
 | Listar mensajes no leídos, `Prefer: outlook.body-content-type` | [user-list-messages](https://learn.microsoft.com/graph/api/user-list-messages) |
-| Responder en el hilo (`comment`, 202, permiso `Mail.Send`) | [message-reply](https://learn.microsoft.com/en-us/graph/api/message-reply) |
+| `/reply` contesta al `replyTo` del original (por eso no se usa) | [message-reply](https://learn.microsoft.com/en-us/graph/api/message-reply) |
 | IMAP de Gmail `imap.gmail.com:993` | [guía Gmail IMAP/SMTP](https://smtpedia.com/gmail) (fuente secundaria) |

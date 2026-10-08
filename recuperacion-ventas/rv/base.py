@@ -70,7 +70,10 @@ DEFAULTS = {
     "email": {"proveedor": "", "remitente": "", "avisos_a": [], "reporte_a": [],
               "smtp": {"host": "", "puerto": 587, "seguridad": "starttls"},
               # canal de clientes: leer el buzón del remitente y contestar (IMAP con smtp; Graph con microsoft)
-              "entrada": {"activa": False, "imap": {"host": "", "puerto": 993}, "por_tick": 25}},
+              "entrada": {"activa": False, "imap": {"host": "", "puerto": 993}, "por_tick": 25,
+                          "servidor_autenticacion": ""}},   # id del Authentication-Results de tu servidor (Gmail: solo)
+    # pagos en línea que registran la venta solos (webhooks en url_publica/pagos/<proveedor>)
+    "pagos": {"stripe": {"activo": False}, "mercadopago": {"activo": False}},
     "mensajes": {},
 }
 

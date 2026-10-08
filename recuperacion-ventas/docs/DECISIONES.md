@@ -183,3 +183,6 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - Se ignoran respuestas automáticas, listas, no-reply, el propio buzón y el equipo: un bot de correo que contesta autorespuestas entra en bucle.
 - De los envíos proactivos solo el recordatorio de cita sale por correo: es transaccional y reduce inasistencias; seguimiento, reactivación y reseñas requieren plantillas aprobadas y consentimiento y se quedan en WhatsApp.
 - Se pide un buzón exclusivo para clientes: todo lo no leído se trata como consulta.
+- Correo entrante: el bot solo contesta si el remitente pasa DMARC según el encabezado de NUESTRO servidor (el primero, y por IMAP con su id); si no, pasa a humano sin respuesta. Evita que un "From" falsificado cancele citas ajenas o use al bot para mandar correo a terceros. Costo: dominios sin DMARC los atiende una persona.
+- Las respuestas por correo van siempre a la dirección guardada; con Microsoft se usa sendMail y no /reply porque /reply obedece el Reply-To, que lo escribe el remitente.
+- HTML de correo a texto con `html.parser` y tope de 100 KB en vez de una expresión regular (la revisión de seguridad mostró que la regex podía tardar muchísimo con HTML malicioso); un correo ilegible se marca leído y no bloquea la cola.

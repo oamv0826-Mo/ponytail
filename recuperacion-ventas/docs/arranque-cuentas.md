@@ -258,6 +258,9 @@ boletines y remitentes "no-reply", y lee cada 5 minutos (con el tick).
 
 - Gmail/Zoho/hosting: misma contraseña de aplicación; agrega el servidor IMAP (Gmail: `imap.gmail.com`, puerto 993;
   si Gmail lo pide, activa IMAP en Configuración → Reenvío y correo POP/IMAP).
+- Si no es Gmail: pon en `email.entrada.servidor_autenticacion` el id con el que tu servidor firma el encabezado
+  `Authentication-Results` de los correos que recibe (ábrelo en "ver original" de cualquier correo: es la primera
+  palabra). Sin él, Agorá no puede saber si un remitente es real y todos los correos pasan a una persona.
 - Microsoft 365: agrega a la app los permisos de aplicación **`Mail.ReadWrite`** (leer y marcar como leído) además de
   `Mail.Send`, y vuelve a conceder el consentimiento.
 

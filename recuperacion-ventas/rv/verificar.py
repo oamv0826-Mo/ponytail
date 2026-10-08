@@ -34,6 +34,10 @@ def locales(con, cfg):
         faltan.append("SMTP_CLAVE")
     if "microsoft" in (em["proveedor"], cfg["agenda"]["proveedor"]):
         faltan += [k for k in ms.SECRETOS if not os.environ.get(k) and k not in faltan]
+    for proveedor, claves in (("stripe", ("STRIPE_WEBHOOK_SECRET",)), ("mercadopago", ("MP_WEBHOOK_SECRET", "MP_ACCESS_TOKEN"))):
+        if cfg["pagos"][proveedor]["activo"]:
+            faltan += [k for k in claves if not os.environ.get(k)]
+            ok(f"pagos {proveedor}: webhook en {cfg['url_publica'].rstrip('/')}/pagos/{proveedor}")
     if faltan:
         (aviso if prueba else error)("faltan secretos: " + ", ".join(faltan))
     else:
@@ -52,6 +56,9 @@ def locales(con, cfg):
            f"· gastado este mes ${ia.costo_mes_usd(con, cfg):.2f}")
     except ia.IAError as e:
         error(str(e))
+    if em["entrada"]["activa"] and em["proveedor"] == "smtp" and not correo.servidor_autenticacion(cfg):
+        error("email.entrada.servidor_autenticacion vacío: sin él ningún correo se considera verificado y todos pasan "
+              "a humano (pon el id que tu servidor escribe en Authentication-Results)")
     if correo.configurado(cfg):
         (ok if em["avisos_a"] else aviso)(f"correo ({em['proveedor']}, desde {em['remitente']}): avisos a "
                                           f"{', '.join(em['avisos_a']) or 'nadie'}")
@@ -70,6 +77,13 @@ def locales(con, cfg):
         atrasado = not ultimo or base.ahora() - base.de_iso(ultimo) > dt.timedelta(minutes=15)
         (error if atrasado else ok)(f"último tick: {ultimo or 'nunca'}")
     return r
+
+
+def _mercadopago_yo():
+    req = urllib.request.Request("https://api.mercadopago.com/users/me",
+                                 headers={"Authorization": f"Bearer {os.environ.get('MP_ACCESS_TOKEN', '')}"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read())
 
 
 def _anthropic_modelo(cfg):
@@ -144,6 +158,15 @@ def remotos(con, cfg):
         r.append(("ERROR", f"Anthropic: {e.code} (clave o modelo inválido)"))
     except Exception as e:
         r.append(("ERROR", f"Anthropic: {e}"))
+    if cfg["pagos"]["mercadopago"]["activo"]:
+        try:
+            yo = _mercadopago_yo()
+            r.append(("OK", f"Mercado Pago: token válido ({yo.get('nickname') or yo.get('id')}, {yo.get('site_id')})"))
+        except Exception as e:
+            r.append(("ERROR", f"Mercado Pago: {e} (revisa MP_ACCESS_TOKEN de producción)"))
+    if cfg["pagos"]["stripe"]["activo"]:
+        r.append(("AVISO", "Stripe: sin llamada de lectura posible con solo el secreto del webhook; manda un evento de "
+                           "prueba desde el panel de Stripe y revisa el log"))
     if correo.configurado(cfg):
         try:
             r.append(("OK", probar_correo(cfg)))
