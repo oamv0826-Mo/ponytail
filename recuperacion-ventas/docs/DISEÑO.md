@@ -263,3 +263,21 @@ no detiene nada. En modo prueba se escribe en `envios-prueba.log` como `correo:<
 | Fin de SMTP AUTH básico en Exchange Online (MC786329) | [resumen del aviso](https://www.itelio.com/en/microsoft-message-center/MC786329) (fuente secundaria) |
 | Outlook.com sin contraseña por SMTP | [Microsoft Q&A](https://learn.microsoft.com/en-us/answers/questions/5900632/i-need-smtp-auth-enabled-for-my-account-******@hot) (fuente comunitaria) |
 | Gmail: contraseña de aplicación, smtp.gmail.com 587/465 | [guía Gmail SMTP](https://smtpedia.com/gmail) (fuente secundaria) |
+
+### 7.3 Calendario de Microsoft 365 (fase 3)
+
+`agenda.proveedor: "microsoft"` con `calendar_id` = correo del buzón (usuario, compartido o sala). Mismo flujo que con
+Google: `ocupado_externo` → `ocupados/restar/horarios_libres` (sin cambios) y freeBusy justo antes de reservar.
+
+- Disponibilidad: `POST /users/{buzón}/calendar/getSchedule` con `startTime/endTime` en UTC; sin el encabezado
+  `Prefer: outlook.timezone` la respuesta viene en UTC. Bloquean todos los estados menos `free` y `workingElsewhere`
+  (un evento "tentativo" no se ofrece). Un `error` en el resultado del buzón es falla, como `notFound` en Google.
+- Crear: `POST /users/{buzón}/calendar/events` (201, `id`), `showAs: busy`. Borrar: `DELETE /users/{buzón}/events/{id}`;
+  404 = ya no existe.
+- Un error de Graph se convierte en `AgendaError`: la conversación pasa a humano igual que con Google.
+- Permiso de aplicación `Calendars.ReadWrite` (cubre lectura y escritura); `verificar --remoto` lo lee del token.
+
+| Qué | Documentación |
+|---|---|
+| getSchedule (permisos, `schedules`, `availabilityViewInterval`, UTC por omisión) | [calendar-getschedule](https://learn.microsoft.com/en-us/graph/api/calendar-getschedule) |
+| Crear evento (201, permiso de aplicación `Calendars.ReadWrite`, alcance limitable con RBAC) | [calendar-post-events](https://learn.microsoft.com/en-us/graph/api/calendar-post-events) |

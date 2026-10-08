@@ -11,7 +11,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from . import base, ia, motor, ventas, wa
+from . import base, ia, motor, ms, ventas, wa
 
 LOCK = threading.Lock()  # reserva = consultar disponibilidad + crear, sin intercalarse con otra reserva del proceso
 GOOGLE_SCOPE = "https://www.googleapis.com/auth/calendar"
@@ -126,8 +126,45 @@ def _cal_id(cfg):
     return urllib.parse.quote(cfg["agenda"]["calendar_id"], safe="")
 
 
-def ocupado_google(cfg, t0, t1):
-    if cfg["agenda"]["proveedor"] != "google":
+# ---------- Microsoft 365 (Graph, permiso de aplicación Calendars.ReadWrite) ----------
+
+def _graph_cal(cfg, metodo, ruta, cuerpo=None):
+    try:
+        return ms.graph(metodo, ms.buzon(cfg["agenda"]["calendar_id"]) + ruta, cuerpo)
+    except ms.MSError as e:
+        raise AgendaError(str(e)) from None
+
+
+def _ms_hora(t):
+    return {"dateTime": t.astimezone(base.UTC).strftime("%Y-%m-%dT%H:%M:%S"), "timeZone": "UTC"}
+
+
+def _de_ms_hora(x):
+    # Graph responde en UTC si no se pide otra zona ("2026-10-06T16:00:00.0000000"): 7 decimales, se cortan
+    return dt.datetime.fromisoformat(x["dateTime"].split(".")[0]).replace(tzinfo=base.UTC)
+
+
+LIBRE_MS = {"free", "workingElsewhere"}   # el resto (busy, tentative, oof, unknown) bloquea el horario
+
+
+def ocupado_microsoft(cfg, t0, t1):
+    r = _graph_cal(cfg, "POST", "/calendar/getSchedule", {
+        "schedules": [cfg["agenda"]["calendar_id"]], "startTime": _ms_hora(t0), "endTime": _ms_hora(t1),
+        "availabilityViewInterval": 15})
+    v = (r.get("value") or [{}])[0]
+    if v.get("error"):
+        raise AgendaError(f"getSchedule: {v['error']}")
+    return [(_de_ms_hora(i["start"]), _de_ms_hora(i["end"])) for i in v.get("scheduleItems", [])
+            if i.get("status") not in LIBRE_MS]
+
+
+# ---------- calendario externo del negocio ----------
+
+def ocupado_externo(cfg, t0, t1):
+    proveedor = cfg["agenda"]["proveedor"]
+    if proveedor == "microsoft":
+        return ocupado_microsoft(cfg, t0, t1)
+    if proveedor != "google":
         return []
     r = _gcal("POST", "freeBusy", {"timeMin": base.iso(t0), "timeMax": base.iso(t1),
                                    "items": [{"id": cfg["agenda"]["calendar_id"]}]})
@@ -138,6 +175,10 @@ def ocupado_google(cfg, t0, t1):
 
 
 def crear_evento(cfg, inicio, fin, titulo, descripcion):
+    if cfg["agenda"]["proveedor"] == "microsoft":
+        return _graph_cal(cfg, "POST", "/calendar/events", {
+            "subject": titulo, "body": {"contentType": "Text", "content": descripcion},
+            "start": _ms_hora(inicio), "end": _ms_hora(fin), "showAs": "busy"})["id"]
     if cfg["agenda"]["proveedor"] != "google":
         return None
     r = _gcal("POST", f"calendars/{_cal_id(cfg)}/events", {
@@ -147,7 +188,11 @@ def crear_evento(cfg, inicio, fin, titulo, descripcion):
 
 
 def borrar_evento(cfg, evento_id):
-    if cfg["agenda"]["proveedor"] == "google" and evento_id:
+    if not evento_id:
+        return
+    if cfg["agenda"]["proveedor"] == "microsoft":
+        _graph_cal(cfg, "DELETE", f"/events/{urllib.parse.quote(evento_id, safe='')}")   # 404: ya no existe
+    elif cfg["agenda"]["proveedor"] == "google":
         _gcal("DELETE", f"calendars/{_cal_id(cfg)}/events/{urllib.parse.quote(evento_id, safe='')}")
 
 
@@ -159,9 +204,9 @@ def ocupados(con, cfg, t0, t1, excluir_cita=None):
     filas = con.execute("SELECT id, inicio, fin FROM cita WHERE estado='agendada' AND fin>? AND inicio<?",
                         (base.iso(t0 - margen), base.iso(t1 + margen))).fetchall()
     propios = [(base.de_iso(f["inicio"]), base.de_iso(f["fin"])) for f in filas if f["id"] != excluir_cita]
-    externos = ocupado_google(cfg, t0 - margen, t1 + margen)
+    externos = ocupado_externo(cfg, t0 - margen, t1 + margen)
     if excluir_cita:
-        # Google recorta los bloques a la ventana consultada y une los contiguos: se resta el intervalo de la
+        # Google y Microsoft recortan los bloques a la ventana consultada y une los contiguos: se resta el intervalo de la
         # cita que se reprograma en vez de compararlo exacto.
         r = con.execute("SELECT inicio, fin FROM cita WHERE id=?", (excluir_cita,)).fetchone()
         if r:

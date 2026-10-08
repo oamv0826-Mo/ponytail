@@ -23,6 +23,7 @@ parecido. Los tiempos son aproximados.
 | 7 | VPS y dominio | 6 a 12 USD al mes, más el dominio | 1 h | **Solo cuando tengas el primer cliente** |
 | 8 | Respaldo externo con rclone | Gratis hasta 10 GB | 20 min | **Solo cuando tengas el primer cliente** |
 | 9 | Correo para avisos y reporte (opcional) | Gratis con Gmail; Microsoft 365 ya pagado por el negocio | 15 a 30 min | bloque `email` → `cliente.json`; `SMTP_CLAVE` o `MS_*` → `secretos.env` |
+| 10 | Calendario de Microsoft 365 (en vez de Google, si el negocio usa Outlook) | Lo que el negocio ya paga | 20 min | `agenda` → `cliente.json`; `MS_*` → `secretos.env` |
 
 Con los pasos 1 a 6 ya puedes hacer la prueba real desde tu Mac ([prueba-real.md](prueba-real.md)).
 
@@ -251,6 +252,27 @@ SMTP en cuentas personales. Usa Gmail o el correo de un dominio propio.
 
 Comprueba con `python3 -m rv --cliente <carpeta> verificar --remoto`: inicia sesión en SMTP sin mandar nada, o revisa
 que el token de Microsoft traiga el permiso `Mail.Send`.
+
+---
+
+## 10. Calendario de Microsoft 365 (en vez de Google)
+
+**Costo:** lo que el negocio ya paga por Microsoft 365. **Tiempo:** 20 min. Lo hace quien administra la cuenta.
+
+1. Crea (o reutiliza) un buzón para las citas, por ejemplo `citas@clinica.mx`; puede ser un buzón compartido o de
+   sala, sin licencia.
+2. En la app "Agorá" del paso 9 (o créala igual: Entra → Registros de aplicaciones → Nuevo registro), agrega
+   **Microsoft Graph → Permisos de aplicación → `Calendars.ReadWrite`** y **concede el consentimiento de
+   administrador**. Los secretos `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET` son los mismos del paso 9.
+3. Igual que con el correo: limita la app a ese buzón con el control de acceso para aplicaciones de Exchange Online;
+   sin eso, `Calendars.ReadWrite` alcanza todos los calendarios del negocio.
+
+```json
+"agenda": {"proveedor": "microsoft", "calendar_id": "citas@clinica.mx"}
+```
+
+`verificar --remoto` revisa que el token traiga `Calendars.ReadWrite` y lee la disponibilidad de mañana. Las citas
+aparecen en el Outlook de quien tenga acceso a ese buzón.
 
 ---
 

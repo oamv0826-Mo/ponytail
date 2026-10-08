@@ -127,6 +127,10 @@ class Config(dict):
             if not s.get("id") or not s.get("nombre") or not isinstance(s.get("duracion_min"), int) \
                     or s["duracion_min"] <= 0 or isinstance(precio, bool) or not isinstance(precio, (int, float)) or precio < 0:
                 errores.append(f"servicio incompleto (id, nombre, precio_mxn numérico ≥ 0, duracion_min entero > 0): {s}")
+        if self["agenda"]["proveedor"] not in ("local", "google", "microsoft"):
+            errores.append(f"agenda.proveedor inválido: {self['agenda']['proveedor']!r} (local, google o microsoft)")
+        elif self["agenda"]["proveedor"] == "microsoft" and "@" not in self["agenda"]["calendar_id"]:
+            errores.append("con agenda microsoft, calendar_id es el correo del buzón o sala (p. ej. citas@negocio.mx)")
         em = self["email"]
         if em["proveedor"] not in ("", "smtp", "microsoft"):
             errores.append(f"email.proveedor inválido: {em['proveedor']!r} (vacío, smtp o microsoft)")

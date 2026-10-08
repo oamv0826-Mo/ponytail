@@ -82,12 +82,12 @@ def r_cita(con, cfg, tel, desde):
     cita = c and _uno(con, "SELECT * FROM cita WHERE contacto_id=? AND creado>=? AND estado='agendada'", c["id"], desde)
     if not cita:
         return False, "todavía no hay cita agendada"
-    google = cfg["agenda"]["proveedor"] == "google"
+    externo = cfg["agenda"]["proveedor"] in ("google", "microsoft")
     ok, txt = _entrega(_salientes(con, desde, tel))
     detalle = f"cita {base.fecha_humana(cfg, base.de_iso(cita['inicio']))} · {txt}"
-    if google:
-        detalle += f" · evento en Google: {cita['evento_id'] or 'NO'}"
-    return ok and (cita["evento_id"] is not None or not google), detalle
+    if externo:
+        detalle += f" · evento en el calendario ({cfg['agenda']['proveedor']}): {cita['evento_id'] or 'NO'}"
+    return ok and (cita["evento_id"] is not None or not externo), detalle
 
 
 def r_baja(con, cfg, tel, desde):

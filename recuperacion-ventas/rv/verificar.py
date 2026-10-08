@@ -42,7 +42,7 @@ def locales(con, cfg):
         (ok if cfg["url_publica"].startswith("https://") else error)(f"url_publica: {cfg['url_publica']}")
         for k in ("phone_number_id", "waba_id"):
             (ok if cfg["whatsapp"].get(k) else error)(f"whatsapp.{k}: {cfg['whatsapp'].get(k) or 'vacío'}")
-        if cfg["agenda"]["proveedor"] == "google" and not cfg["agenda"].get("calendar_id"):
+        if cfg["agenda"]["proveedor"] != "local" and not cfg["agenda"].get("calendar_id"):
             error("agenda.calendar_id vacío")
     if not cfg.internos:
         error("no hay dueño ni equipo con teléfono: nadie recibiría los avisos de handoff")
@@ -151,11 +151,21 @@ def remotos(con, cfg):
             r.append(("ERROR", f"correo: {e}"))
     if cfg["agenda"]["proveedor"] == "google":
         try:
-            agenda.ocupado_google(cfg, base.ahora(), base.ahora() + dt.timedelta(days=1))
+            agenda.ocupado_externo(cfg, base.ahora(), base.ahora() + dt.timedelta(days=1))
             r.append(("OK", "Google Calendar: lectura de disponibilidad (freeBusy)"))
         except Exception as e:
             r.append(("ERROR", f"Google Calendar: {e} (comparte el calendario con {_correo_cuenta_servicio()} "
                                "con permiso «Hacer cambios en eventos»)"))
+    if cfg["agenda"]["proveedor"] == "microsoft":
+        try:
+            faltan = PERMISOS_MS["calendario"] - ms.permisos()
+            if faltan:
+                raise RuntimeError(f"a la app le falta el permiso de aplicación {', '.join(faltan)} con consentimiento")
+            agenda.ocupado_externo(cfg, base.ahora(), base.ahora() + dt.timedelta(days=1))
+            r.append(("OK", f"calendario Microsoft 365 de {cfg['agenda']['calendar_id']}: lectura (getSchedule) y permiso "
+                            "de escritura"))
+        except Exception as e:
+            r.append(("ERROR", f"calendario Microsoft 365: {e}"))
     return r
 
 
@@ -163,7 +173,7 @@ def url_webhook(cfg):
     return cfg["url_publica"].rstrip("/") + "/webhook"
 
 
-PERMISOS_MS = {"correo": {"Mail.Send"}}
+PERMISOS_MS = {"correo": {"Mail.Send"}, "calendario": {"Calendars.ReadWrite"}}
 
 
 def probar_correo(cfg):

@@ -175,3 +175,6 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - El aviso por correo usa el mismo texto que la plantilla `aviso_equipo` (una sola fuente) y va a `email.avisos_a`, aparte de los teléfonos del equipo.
 - El reporte mensual se manda por correo solo con `reporte --enviar`: el operador lo revisa antes de mandarlo, como ya decía el checklist mensual.
 - `verificar --remoto` prueba el correo sin mandar nada: inicia sesión SMTP o lee el claim `roles` del token de Microsoft, porque un token sin consentimiento de administrador sale bien y el envío falla después.
+- Calendario de Microsoft 365 por Graph con permiso de aplicación (`Calendars.ReadWrite`) sobre un buzón de citas, igual que la cuenta de servicio de Google: nadie tiene que iniciar sesión ni renovar tokens.
+- Con Microsoft, un evento "tentativo" bloquea el horario (solo `free` y `workingElsewhere` lo dejan libre): ofrecer un horario dudoso cuesta más que no ofrecerlo.
+- `ocupado_google` pasa a `ocupado_externo` y despacha por proveedor; la lógica de horarios libres no cambia.

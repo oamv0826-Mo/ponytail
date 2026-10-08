@@ -56,6 +56,12 @@ class CorreoSaliente(ConCorreo):
         with mock.patch("smtplib.SMTP", side_effect=OSError("sin red")):
             self.assertEqual(correo.enviar(self.cfg, ["dueno@clinica.mx"], "A", "B"), (None, "sin red"))
 
+    def test_cabeceras_con_salto_de_linea_no_rompen_ni_inyectan(self):
+        mid, error = correo.enviar(self.cfg, ["dueno@clinica.mx"], "Aviso\r\nBcc: x@y.mx", "texto")
+        self.assertIsNone(error)
+        self.assertIn("\tAviso Bcc: x@y.mx | texto", self.log())
+        self.assertEqual(correo.enviar(self.cfg, ["a@b.mx\r\nBcc: x@y.mx"], "A", "B")[0], None)   # error, sin excepción
+
     def test_microsoft_365_por_graph(self):
         self.cfg["modo_prueba"] = False
         self.cfg["email"]["proveedor"] = "microsoft"
@@ -93,3 +99,47 @@ class CorreoSaliente(ConCorreo):
             self.cfg["email"] = base._fusionar(self.CONFIG["email"], malo) | {"avisos_a": []}
             with self.assertRaises(ValueError):
                 self.cfg.validar()
+
+
+class CalendarioMicrosoft(Caso):
+    CONFIG = {"agenda": {"proveedor": "microsoft", "calendar_id": "citas@clinica.mx"}}
+
+    def test_disponibilidad_eventos_y_errores(self):
+        from rv import agenda
+        t0 = self.t
+        respuesta = {"value": [{"scheduleId": "citas@clinica.mx", "scheduleItems": [
+            {"status": "busy", "start": {"dateTime": "2026-10-06T18:00:00.0000000", "timeZone": "UTC"},
+             "end": {"dateTime": "2026-10-06T19:00:00.0000000", "timeZone": "UTC"}},
+            {"status": "tentative", "start": {"dateTime": "2026-10-06T20:00:00.0000000", "timeZone": "UTC"},
+             "end": {"dateTime": "2026-10-06T20:30:00.0000000", "timeZone": "UTC"}},
+            {"status": "free", "start": {"dateTime": "2026-10-06T21:00:00.0000000", "timeZone": "UTC"},
+             "end": {"dateTime": "2026-10-06T22:00:00.0000000", "timeZone": "UTC"}}]}]}
+        with mock.patch.object(ms, "graph", return_value=respuesta) as g:
+            ocupado = agenda.ocupado_externo(self.cfg, t0, t0 + agenda.dt.timedelta(days=1))
+        self.assertEqual([(a.hour, b.hour, b.minute) for a, b in ocupado], [(18, 19, 0), (20, 20, 30)])
+        metodo, ruta, cuerpo = g.call_args.args
+        self.assertEqual((metodo, ruta), ("POST", "users/citas@clinica.mx/calendar/getSchedule"))
+        self.assertEqual(cuerpo["startTime"], {"dateTime": "2026-10-06T16:00:00", "timeZone": "UTC"})
+        with mock.patch.object(ms, "graph", return_value={"value": [{"error": {"message": "no existe"}}]}), \
+                self.assertRaises(agenda.AgendaError):
+            agenda.ocupado_externo(self.cfg, t0, t0 + agenda.dt.timedelta(hours=1))
+        with mock.patch.object(ms, "graph", side_effect=ms.MSError("Microsoft 403")), self.assertRaises(agenda.AgendaError):
+            agenda.ocupado_externo(self.cfg, t0, t0 + agenda.dt.timedelta(hours=1))   # la agenda lo convierte en handoff
+        with mock.patch.object(ms, "graph", return_value={"id": "AAMk="}) as g:
+            self.assertEqual(agenda.crear_evento(self.cfg, t0, t0 + agenda.dt.timedelta(hours=1), "Limpieza", "d"), "AAMk=")
+            agenda.borrar_evento(self.cfg, "AAMk=")
+        crear, borrar = g.call_args_list
+        self.assertEqual(crear.args[1], "users/citas@clinica.mx/calendar/events")
+        self.assertEqual(crear.args[2]["end"], {"dateTime": "2026-10-06T17:00:00", "timeZone": "UTC"})
+        self.assertEqual(borrar.args[:2], ("DELETE", "users/citas@clinica.mx/events/AAMk%3D"))
+
+    def test_verificar_y_config(self):
+        self.cfg["modo_prueba"] = False
+        with mock.patch.object(ms, "permisos", return_value={"Mail.Send"}), \
+                mock.patch("rv.wa.graph_get", return_value={}), \
+                mock.patch.object(verificar, "_anthropic_modelo", return_value={"id": "x"}):
+            errores = [m for n, m in verificar.remotos(self.con, self.cfg) if n == "ERROR"]
+        self.assertTrue(any("Calendars.ReadWrite" in m for m in errores))
+        self.cfg["agenda"]["calendar_id"] = "AAMkAGI2"
+        with self.assertRaisesRegex(ValueError, "correo del buzón"):
+            self.cfg.validar()

@@ -17,7 +17,7 @@ def mensaje(cfg, para, asunto, texto, responde_a=None):
     m = EmailMessage()
     m["From"] = f"{cfg['nombre']} <{cfg['email']['remitente']}>"
     m["To"] = ", ".join(para)
-    m["Subject"] = asunto
+    m["Subject"] = " ".join(asunto.split())   # sin saltos de línea: un CR/LF en una cabecera es inválido (o inyección)
     m["Date"] = formatdate(localtime=True)
     m["Message-ID"] = make_msgid(domain=cfg["email"]["remitente"].rsplit("@", 1)[-1])
     if responde_a:   # para que el cliente vea la respuesta en el mismo hilo
@@ -62,14 +62,15 @@ def enviar(cfg, para, asunto, texto, responde_a=None):
     para = [p.strip() for p in para if p and p.strip()]
     if not para or not configurado(cfg):
         return None, "correo no configurado"
-    m = mensaje(cfg, para, asunto, texto, responde_a)
-    if cfg["modo_prueba"]:
-        with open(cfg.carpeta / "envios-prueba.log", "a", encoding="utf-8") as f:
-            f.write(f"{base.iso(base.ahora())}\tcorreo:{','.join(para)}\tsistema\t{asunto} | {' '.join(texto.split())}\n")
-        return m["Message-ID"], None
     try:
-        (_microsoft if cfg["email"]["proveedor"] == "microsoft" else _smtp)(cfg, m)
+        m = mensaje(cfg, para, asunto, texto, responde_a)
+        if cfg["modo_prueba"]:
+            with open(cfg.carpeta / "envios-prueba.log", "a", encoding="utf-8") as f:
+                f.write(f"{base.iso(base.ahora())}\tcorreo:{','.join(para)}\tsistema\t{m['Subject']} | "
+                        f"{' '.join(texto.split())}\n")
+        else:
+            (_microsoft if cfg["email"]["proveedor"] == "microsoft" else _smtp)(cfg, m)
         return m["Message-ID"], None
-    except (OSError, smtplib.SMTPException, ms.MSError) as e:
+    except Exception as e:  # cabecera inválida, red, SMTP, Graph: se registra y sigue
         base.log("correo fallido", ",".join(para), asunto, repr(e))
         return None, str(e)

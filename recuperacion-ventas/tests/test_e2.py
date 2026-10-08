@@ -89,7 +89,7 @@ class Horarios(Caso):
 
     def test_ocupado_en_google_se_respeta(self):
         busy = [(local(2026, 10, 6, 11, 0), local(2026, 10, 6, 14, 0))]
-        with mock.patch.object(agenda, "ocupado_google", return_value=busy):
+        with mock.patch.object(agenda, "ocupado_externo", return_value=busy):
             self.assertEqual(agenda.horarios_libres(self.con, self.cfg, "limpieza")[0], local(2026, 10, 6, 16, 0))
 
     def test_sabado_tarde_salta_domingo(self):
@@ -119,7 +119,7 @@ class Flujo(Caso):
     def test_revisa_google_justo_antes_de_crear(self):
         self.escribir("quiero agendar una limpieza")
         ocupado = [(local(2026, 10, 6, 12, 0), local(2026, 10, 6, 13, 0))]   # alguien lo tomó en Google
-        with mock.patch.object(agenda, "ocupado_google", return_value=ocupado):
+        with mock.patch.object(agenda, "ocupado_externo", return_value=ocupado):
             salida = self.escribir("1")
         self.assertEqual(salida[0]["texto"], self.cfg.msg["horario_ocupado"])
         self.assertEqual(self.con.execute("SELECT COUNT(*) FROM cita").fetchone()[0], 0)

@@ -54,7 +54,7 @@ class ReprogramarConGoogle(Caso):
     def test_bloque_recortado_o_unido_por_google_no_bloquea_su_propio_horario(self):
         c, vieja = self.cita_vieja()
         unido = [(local(2026, 10, 7, 9, 0), local(2026, 10, 7, 10, 45))]   # otro evento 9-10 unido al propio
-        with mock.patch.object(agenda, "ocupado_google", return_value=unido), \
+        with mock.patch.object(agenda, "ocupado_externo", return_value=unido), \
                 mock.patch.object(agenda, "crear_evento", return_value="ev-nuevo"), \
                 mock.patch.object(agenda, "borrar_evento"):
             nueva = agenda.reservar(self.con, self.cfg, c, "limpieza", local(2026, 10, 7, 10, 30), reprograma=vieja)
@@ -63,7 +63,7 @@ class ReprogramarConGoogle(Caso):
 
     def test_si_falla_borrar_el_evento_viejo_no_queda_doble_cita_y_se_avisa(self):
         c, vieja = self.cita_vieja()
-        with mock.patch.object(agenda, "ocupado_google", return_value=[]), \
+        with mock.patch.object(agenda, "ocupado_externo", return_value=[]), \
                 mock.patch.object(agenda, "crear_evento", return_value="ev-nuevo"), \
                 mock.patch.object(agenda, "borrar_evento", side_effect=agenda.AgendaError("Google 500")):
             nueva = agenda.reservar(self.con, self.cfg, c, "limpieza", local(2026, 10, 8, 10, 0), reprograma=vieja)
@@ -74,7 +74,7 @@ class ReprogramarConGoogle(Caso):
 
     def test_no_pisa_una_cita_que_ya_se_marco_asistio(self):
         c, vieja = self.cita_vieja(estado="asistio")
-        with mock.patch.object(agenda, "ocupado_google", return_value=[]), \
+        with mock.patch.object(agenda, "ocupado_externo", return_value=[]), \
                 mock.patch.object(agenda, "crear_evento", return_value="ev-nuevo"), \
                 mock.patch.object(agenda, "borrar_evento") as borrar:
             agenda.reservar(self.con, self.cfg, c, "limpieza", local(2026, 10, 8, 10, 0), reprograma=vieja)
