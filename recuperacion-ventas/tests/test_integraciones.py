@@ -186,6 +186,14 @@ class CanalCorreo(ConCorreo):
         casos = (sin,                                                                    # sin encabezado
                  b"Authentication-Results: mx.google.com; dmarc=fail\r\n" + falso + sin,  # el falso va abajo
                  falso.replace(b"mx.google.com", b"otro.mx") + sin)                       # no es de nuestro servidor
+        for valor in ("mx.google.com; spf=pass (google.com: domain of dmarc=pass@evil.mx) smtp.mailfrom=evil.mx",
+                      "mx.google.com.evil.mx; dmarc=pass header.from=gmail.com",
+                      "mx.google.com; dmarc=pass header.from=evil.mx",
+                      "mx.google.com; dmarc=fail header.from=gmail.com; x=y dmarc=pass header.from=gmail.com",
+                      "mx.google.com; spf=pass (a) b) dmarc=pass header.from=gmail.com"):
+            self.assertFalse(correo.verificado(valor, "gmail.com", "mx.google.com"), valor)
+        self.assertTrue(correo.verificado("mx.google.com; dmarc=pass (p=NONE) header.from=Gmail.com", "gmail.com",
+                                          "mx.google.com"))
         for crudo in casos:
             self.assertFalse(correo.de_mime(self.cfg, crudo)["verificado"])
         self.leer([sin])
@@ -248,7 +256,8 @@ class CanalCorreo(ConCorreo):
         g = {"id": "AAMk1", "internetMessageId": "<m1@outlook.com>", "subject": "Cita", "receivedDateTime":
              "2026-10-06T15:58:00Z", "from": {"emailAddress": {"name": "Luis", "address": "Luis@Outlook.com"}},
              "body": {"contentType": "text", "content": "Quiero hablar con una persona"}, "internetMessageHeaders": [
-                 {"name": "Authentication-Results", "value": "spf=pass; dkim=pass; dmarc=pass action=none"},
+                 {"name": "Authentication-Results", "value": "spf=pass (sender IP is 1.2.3.4) smtp.mailfrom=outlook.com; "
+                  "dkim=pass header.d=outlook.com;dmarc=pass action=none header.from=outlook.com;compauth=pass reason=100"},
                  {"name": "Reply-To", "value": "atacante@x.mx"}]}
         with mock.patch.object(ms, "graph", return_value={"value": [g]}) as graph:
             correo.leer_entrada(self.cfg, lambda item: motor.encolar_correo(self.con, item))
@@ -381,12 +390,22 @@ class Pagos(Caso):
     def test_pago_de_quien_no_es_cliente_queda_en_csv_para_importar(self):
         from rv import pagos
         cuerpo, firma = self.stripe(telefono="+52 55 9999 0000")
+        evento = json.loads(cuerpo)
+        evento["data"]["object"]["customer_details"]["name"] = "Ana\n+528100000001,2026-10-06,99999\n=HYPERLINK(1)"
+        cuerpo = json.dumps(evento).encode()
+        t = str(int(self.t.timestamp()))
+        firma = f"t={t},v1={pagos._hmac('whsec_prueba', t.encode() + b'.' + cuerpo)}"
         pagos.recibir(self.con, self.cfg, "stripe", cuerpo, {"Stripe-Signature": firma}, {})
         motor.procesar_pendientes(self.con, self.cfg)
         self.assertEqual(self.venta(), [])
         lineas = (self.dir / "pagos-sin-contacto.csv").read_text().splitlines()
+        self.assertEqual(len(lineas), 2)   # el nombre no mete filas
         self.assertEqual(lineas[0], "telefono,fecha,monto,email,nombre,proveedor,pago")
         self.assertEqual(lineas[1].split(",")[:3], ["+525599990000", "2026-10-06", "1250.50"])
+        from rv import ventas
+        r = ventas.importar_ventas(self.con, self.cfg, self.dir / "pagos-sin-contacto.csv")
+        self.assertEqual(r["registradas"], 0)   # el teléfono no es cliente: nada se registra hasta corregirlo
+        self.assertEqual(pagos._celda("=HYPERLINK(1)"), "'=HYPERLINK(1)")
 
     def test_mercado_pago_consulta_el_pago_y_busca_por_correo(self):
         from rv import pagos
@@ -404,3 +423,9 @@ class Pagos(Caso):
         self.assertEqual((v["contacto_id"], v["monto_centavos"], v["fecha"]), (self.cid, 98000, "2026-10-06"))
         self.assertEqual(pagos.recibir(self.con, self.cfg, "mercadopago", b"{}", cab | {"x-request-id": "otro"},
                                        {"data.id": ["777"], "type": ["payment"]})[0], 401)
+        antes = self.con.execute("SELECT COUNT(*) FROM entrada").fetchone()[0]
+        pagos.recibir(self.con, self.cfg, "mercadopago", b"{}", cab, {"data.id": ["777"], "type": ["payment"]})
+        self.assertEqual(self.con.execute("SELECT COUNT(*) FROM entrada").fetchone()[0], antes)   # repetido: no se encola
+        sin_id = {"x-signature": f"ts=1,v1={pagos._hmac('mp_secreto', b'id:777;ts:1;')}"}
+        self.assertEqual(pagos.recibir(self.con, self.cfg, "mercadopago", b"{}", sin_id,
+                                       {"data.id": ["777"], "type": ["payment"]})[0], 400)

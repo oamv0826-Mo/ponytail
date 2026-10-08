@@ -293,7 +293,9 @@ Google: `ocupado_externo` → `ocupados/restar/horarios_libres` (sin cambios) y 
   `no-reply`/`mailer-daemon`, `Auto-Submitted` distinto de `no`, `X-Autoreply`, `Precedence: bulk/list/junk`,
   `List-Id`/`List-Unsubscribe`. Así no hay bucles con respuestas automáticas ni se le contesta a boletines.
 - **Remitente verificado**: el bot solo actúa si el `Authentication-Results` que agregó nuestro servidor (el primero;
-  por IMAP además con su id, Gmail = `mx.google.com`, o `email.entrada.servidor_autenticacion`) dice `dmarc=pass`.
+  por IMAP además con exactamente su id, Gmail = `mx.google.com`, o `email.entrada.servidor_autenticacion`) trae la
+  cláusula `dmarc=pass` con `header.from` = dominio del remitente, leída como RFC 8601 (sin comentarios: pueden traer
+  datos del remitente; si algo no se puede leer, no está verificado).
   Si no, el correo pasa a una persona sin contestarle nada al remitente: un "From:" falsificado no puede cancelar la
   cita de otro ni hacer que el bot le escriba a un tercero (backscatter). La respuesta va siempre a la dirección
   guardada, nunca a un `Reply-To` (por eso con Microsoft se usa `sendMail` y no `/reply`, que obedece el Reply-To).
@@ -332,7 +334,9 @@ Verificar firma → encolar en `entrada` → 200; el trabajador procesa como cua
   actualizado); la venta no se duplica por la regla de `registrar_venta` (mismo contacto, fecha y monto).
 - Solo MXN. Cliente por teléfono (normalizado a E.164) o por `contacto.email`; la venta se registra con
   `ventas.registrar_venta` (misma atribución y garantía) y `registrado_por = pago:<proveedor>:<id>`. Sin cliente:
-  `pagos-sin-contacto.csv`, compatible con `importar-ventas`.
+  `pagos-sin-contacto.csv` (con `csv.writer`, sin saltos de línea ni fórmulas en lo que escribe el pagador),
+  compatible con `importar-ventas`. Mercado Pago exige `x-request-id` (va firmado) y se deduplica por él: repetir un
+  aviso capturado no lo vuelve a encolar.
 - Reembolsos: no se descuentan solos (el reporte cuenta ventas registradas); se corrigen a mano.
 - **Clip**: no se encontró documentación pública de webhooks de pagos (un hilo de su foro pregunta lo mismo sin
   respuesta); sus ventas entran por `importar-ventas`.

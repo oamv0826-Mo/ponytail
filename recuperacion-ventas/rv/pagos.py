@@ -1,12 +1,13 @@
 """Pagos en línea → ventas registradas solas: webhooks de Stripe y Mercado Pago (firma verificada), a la misma cola
 que WhatsApp; el trabajador busca al cliente por teléfono o correo y llama a ventas.registrar_venta (misma atribución
 que una venta capturada a mano). Clip: sin webhooks documentados de pagos; sus ventas entran por importar-ventas."""
+import csv
 import datetime as dt
 import hashlib
 import hmac
 import json
 import os
-import time
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -72,8 +73,11 @@ def recibir(con, cfg, proveedor, cuerpo, cabeceras, query):
             return 401, "firma inválida"
         if (query.get("type") or [""])[0] != "payment" or not data_id:
             return 200, "evento ignorado"
-        # un pago puede notificarse varias veces (creado, actualizado): cada aviso se revisa; la venta no se duplica
-        clave = f"p:mp:{data_id}:{cabeceras.get('x-request-id') or time.time_ns()}"
+        if not cabeceras.get("x-request-id"):
+            return 400, "falta x-request-id"
+        # un pago puede notificarse varias veces (creado, actualizado): cada aviso (x-request-id, firmado) se revisa
+        # una vez; repetir un aviso capturado no vuelve a encolarlo, y la venta tampoco se duplica
+        clave = f"p:mp:{data_id}:{cabeceras['x-request-id']}"
         item = {"tipo": "pago", "proveedor": "mercadopago", "id": data_id}
     con.execute("INSERT OR IGNORE INTO entrada (clave, payload, recibido) VALUES (?,?,?)",
                 (clave, json.dumps(item, ensure_ascii=False), base.iso(base.ahora())))
@@ -108,6 +112,13 @@ def normalizar(item):
             "nombre": " ".join(x for x in (payer.get("first_name"), payer.get("last_name")) if x)}
 
 
+def _celda(x):
+    """El nombre y el correo los escribe el pagador: sin saltos de línea (filas falsas que importar-ventas tomaría
+    como ventas) y sin fórmulas de Excel."""
+    s = " ".join(str(x or "").split())
+    return "'" + s if s[:1] in ("=", "+", "-", "@") and not re.fullmatch(r"\+\d{8,15}", s) else s
+
+
 def procesar(con, cfg, item):
     """Registra la venta si el pago está aprobado, es en MXN y el cliente existe; si no lo encuentra, lo deja en
     pagos-sin-contacto.csv para capturarlo con importar-ventas."""
@@ -125,11 +136,11 @@ def procesar(con, cfg, item):
     monto = f"{p['centavos'] / 100:.2f}"
     if not c:
         nuevo = not (cfg.carpeta / "pagos-sin-contacto.csv").exists()
-        with open(cfg.carpeta / "pagos-sin-contacto.csv", "a", encoding="utf-8") as f:
+        with open(cfg.carpeta / "pagos-sin-contacto.csv", "a", encoding="utf-8", newline="") as f:
+            w = csv.writer(f)
             if nuevo:
-                f.write("telefono,fecha,monto,email,nombre,proveedor,pago\n")
-            f.write(",".join(str(x or "").replace(",", " ") for x in
-                             (tel, fecha, monto, email, p["nombre"], item["proveedor"], p["id"])) + "\n")
+                w.writerow(["telefono", "fecha", "monto", "email", "nombre", "proveedor", "pago"])
+            w.writerow([_celda(x) for x in (tel, fecha, monto, email, p["nombre"], item["proveedor"], p["id"])])
         base.log("pago sin contacto:", item["proveedor"], p["id"])
         return None
     vid, error = ventas.registrar_venta(con, cfg, c["id"], monto, fecha, f"pago:{item['proveedor']}:{p['id']}")

@@ -149,16 +149,27 @@ def servidor_autenticacion(cfg):
     return e.get("servidor_autenticacion") or SERVIDORES_AUTENTICACION.get(e["imap"]["host"].lower(), "")
 
 
-def verificado(autenticacion, servidor=None):
-    """El remitente es quien dice ser: DMARC aprobado en el Authentication-Results que agregó NUESTRO servidor de
-    correo (el primero, arriba de todo; los de más abajo los pudo escribir cualquiera). Por IMAP además debe traer
-    el id de nuestro servidor (Gmail: mx.google.com): si el servidor no agrega el suyo, el primero sería el del
-    remitente. Sin esto, cualquiera escribe "From: cliente@gmail.com" y cancela su cita o hace que el bot le
-    conteste a un tercero."""
-    a = (autenticacion or "").strip()
-    if servidor is not None and (not servidor or not a.lower().startswith(servidor.lower())):
+def verificado(autenticacion, dominio_from, servidor=None):
+    """El remitente es quien dice ser: DMARC aprobado para el dominio del From en el Authentication-Results que
+    agregó NUESTRO servidor (el primero, arriba de todo; los de más abajo los pudo escribir cualquiera). Por IMAP
+    debe traer exactamente el id de nuestro servidor (Gmail: mx.google.com); Exchange Online no pone id y siempre
+    agrega el suyo arriba. Se lee como RFC 8601 (sin comentarios, cláusula 'dmarc=pass ... header.from=<dominio>'),
+    no buscando texto: un comentario puede traer datos del remitente. Ante cualquier duda: no verificado."""
+    a = autenticacion or ""
+    for _ in range(3):   # comentarios (posiblemente anidados)
+        a = re.sub(r"\([^()]*\)", " ", a)
+    if "(" in a or ")" in a:
         return False
-    return bool(re.search(r"\bdmarc=pass\b", a, re.I))
+    partes = [p.split() for p in a.split(";")]
+    if servidor is not None:
+        if not servidor or not partes or not partes[0] or partes[0][0].lower() != servidor.lower():
+            return False
+        partes = partes[1:]
+    for tokens in partes:
+        if tokens and tokens[0].lower() == "dmarc=pass":
+            dominio = next((t.split("=", 1)[1].lower() for t in tokens[1:] if t.lower().startswith("header.from=")), "")
+            return bool(dominio_from) and dominio == dominio_from.lower()
+    return False
 
 
 def _item(cfg, de, nombre, asunto, msg_id, texto, fecha, graph_id=None, cabeceras=None, autenticacion=None,
@@ -167,7 +178,7 @@ def _item(cfg, de, nombre, asunto, msg_id, texto, fecha, graph_id=None, cabecera
     motivo = ignorar(cfg, de, cabeceras or {})
     return {"tipo": "correo", "de": de, "nombre": nombre or "", "asunto": " ".join((asunto or "").split())[:200],
             "id": msg_id or f"<sin-id-{graph_id or fecha}>", "texto": texto, "fecha": fecha, "graph_id": graph_id,
-            "ignorar": motivo, "verificado": verificado(autenticacion, servidor)}
+            "ignorar": motivo, "verificado": verificado(autenticacion, de.rpartition("@")[2], servidor)}
 
 
 def de_mime(cfg, crudo):

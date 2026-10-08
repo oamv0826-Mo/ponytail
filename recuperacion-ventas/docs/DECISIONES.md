@@ -192,3 +192,6 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - Solo se registran pagos en MXN y aprobados; los reembolsos no se restan solos (no hay borrado de ventas y la garantía se revisa con el dueño cada mes).
 - La tolerancia de 5 min de la firma de Stripe usa el reloj del sistema (`base.ahora`), el mismo que el resto.
 - Clip queda por CSV: no hay webhooks de pagos documentados.
+- DMARC se lee como RFC 8601 (id exacto del servidor, sin comentarios, `dmarc=pass` con `header.from` igual al dominio del remitente) y no buscando el texto "dmarc=pass": la revisión de seguridad mostró que un comentario con datos del remitente (p. ej. `dmarc=pass@evil.mx`) lo burlaba.
+- `pagos-sin-contacto.csv` se escribe con `csv.writer` y sin saltos de línea ni fórmulas: el nombre lo escribe el pagador y una fila inyectada se volvería una venta falsa al importarla.
+- Mercado Pago: se exige `x-request-id` y se deduplica por él (va dentro de la firma), para que un aviso capturado no se pueda repetir.
