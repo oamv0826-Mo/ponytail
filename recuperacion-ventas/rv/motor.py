@@ -38,7 +38,17 @@ def contacto(con, cid):
 
 
 def responder(con, cfg, c, texto, autor="bot"):
-    return wa.enviar(con, cfg, c["telefono"], texto=texto, contacto_id=c["id"], autor=autor)
+    """Contesta por el canal del contacto: WhatsApp o, si escribió por correo, en su mismo hilo de correo."""
+    if not base.es_correo(c):
+        return wa.enviar(con, cfg, c["telefono"], texto=texto, contacto_id=c["id"], autor=autor)
+    mid = con.execute("INSERT INTO mensaje (contacto_id, telefono, direccion, tipo, texto, autor, estado, creado) "
+                      "VALUES (?,?,?,?,?,?,?,?)", (c["id"], c["telefono"], "out", "texto", texto, autor, "pendiente",
+                                                    base.iso(base.ahora()))).lastrowid
+    msg_id, error = correo.responder(cfg, contacto(con, c["id"]), texto)
+    estado = "error" if error else "prueba" if cfg["modo_prueba"] else "enviado"
+    con.execute("UPDATE mensaje SET estado=?, error=?, wa_id=? WHERE id=?",
+                (estado, error, f"correo-out:{msg_id}" if msg_id else None, mid))
+    return mid, error is None
 
 
 def link_bandeja(cfg, cid):
@@ -116,6 +126,8 @@ def procesar_item(con, cfg, item, reintento=False):
         return
     if item["tipo"] == "estado":
         actualizar_estado(con, item["estado"])
+    elif item["tipo"] == "correo":
+        procesar_correo(con, cfg, item, reintento)
     else:
         procesar_mensaje(con, cfg, item, reintento)
 
@@ -165,6 +177,11 @@ def guardar_entrante(con, cfg, item, reintento=False):
         if con.execute("SELECT 1 FROM mensaje WHERE contacto_id=? AND direccion='out' AND id>?",
                        (c["id"], previo["id"])).fetchone():
             return None  # ya se había respondido antes de la caída
+    return _registrar_entrante(con, cfg, c, ts), texto
+
+
+def _registrar_entrante(con, cfg, c, ts):
+    """Lo común a WhatsApp y correo después de guardar el mensaje: primera consulta, fuera de horario, seguimiento."""
     if not c["primer_entrante"]:
         con.execute("UPDATE contacto SET primer_entrante=? WHERE id=?", (base.iso(ts), c["id"]))
         if not base.abierto(cfg, ts):
@@ -176,7 +193,47 @@ def guardar_entrante(con, cfg, item, reintento=False):
                 "seg_activo=CASE WHEN seg_paso>0 THEN 0 ELSE seg_activo END, "
                 "seg_inicio=CASE WHEN seg_activo=1 AND seg_paso=0 THEN MAX(COALESCE(seg_inicio, ''), ?) "
                 "ELSE seg_inicio END WHERE id=?", (base.iso(ts), base.iso(ts), c["id"]))
-    return contacto(con, c["id"]), texto
+    return contacto(con, c["id"])
+
+
+def guardar_correo(con, cfg, item, reintento=False):
+    """Contacto por su dirección (crea uno si no existe) y el correo como mensaje entrante. None si se ignora."""
+    if item.get("ignorar"):
+        base.log("correo ignorado:", item["de"], item["ignorar"])
+        return None
+    de, ts = item["de"], base.de_iso(item["fecha"]) or base.ahora()
+    c = con.execute("SELECT * FROM contacto WHERE email=? OR telefono=?", (de, de)).fetchone()
+    if not c:
+        cid = con.execute("INSERT INTO contacto (telefono, nombre, email, creado) VALUES (?,?,?,?)",
+                          (de, limpiar_nombre(item.get("nombre")), de, base.iso(base.ahora()))).lastrowid
+        c = contacto(con, cid)
+    hilo = json.dumps({"id": item["id"], "asunto": item["asunto"], "graph_id": item.get("graph_id")})
+    con.execute("UPDATE contacto SET email_hilo=? WHERE id=?", (hilo, c["id"]))
+    texto = item["texto"] or item["asunto"]   # un correo con solo asunto ("¿precio de limpieza?") también es consulta
+    cur = con.execute("INSERT OR IGNORE INTO mensaje (contacto_id, telefono, direccion, tipo, texto, autor, wa_id, "
+                      "estado, creado) VALUES (?,?,?,?,?,?,?,?,?)",
+                      (c["id"], c["telefono"], "in", "texto", texto, "cliente", f"correo:{item['id']}", "recibido",
+                       base.iso(ts)))
+    if cur.rowcount == 0:   # el mismo Message-ID: duplicado, salvo que una caída lo haya dejado sin respuesta
+        previo = con.execute("SELECT id FROM mensaje WHERE wa_id=?", (f"correo:{item['id']}",)).fetchone()
+        if not reintento or con.execute("SELECT 1 FROM mensaje WHERE contacto_id=? AND direccion='out' AND id>?",
+                                        (c["id"], previo["id"])).fetchone():
+            return None
+    return _registrar_entrante(con, cfg, c, ts), texto
+
+
+def procesar_correo(con, cfg, item, reintento=False):
+    r = guardar_correo(con, cfg, item, reintento)
+    if r is None:
+        return
+    c, texto = r
+    try:
+        atender(con, cfg, c, texto)
+    except Exception as e:  # misma red de seguridad que WhatsApp
+        base.log("error atendiendo correo:", repr(e))
+        if contacto(con, c["id"])["estado"] != "humano":
+            handoff(con, cfg, c["id"], "error_interno")
+        raise
 
 
 def procesar_mensaje(con, cfg, item, reintento=False):
@@ -282,6 +339,12 @@ def procesar_pendientes(con, cfg, limite=100):
         con.execute("UPDATE entrada SET terminado=? WHERE id=?", (base.iso(base.ahora()), f["id"]))
         hechos += 1
     return hechos
+
+
+def encolar_correo(con, item):
+    """Un correo leído del buzón a la misma cola que el webhook (dedupe por Message-ID)."""
+    return con.execute("INSERT OR IGNORE INTO entrada (clave, payload, recibido) VALUES (?,?,?)",
+                       (f"e:{item['id']}", json.dumps(item, ensure_ascii=False), base.iso(base.ahora()))).rowcount
 
 
 def encolar(con, payload):

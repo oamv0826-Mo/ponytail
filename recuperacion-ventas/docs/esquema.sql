@@ -172,3 +172,11 @@ CREATE INDEX cita_contacto ON cita(contacto_id, estado, inicio);
 CREATE INDEX mensaje_contacto_id ON mensaje(contacto_id);
 CREATE INDEX ia_uso_creado ON ia_uso(creado);
 CREATE INDEX evento_tipo ON evento(tipo, creado);
+
+-- version: 7
+-- Correo como canal: un cliente que escribe por correo es un contacto cuyo "telefono" es su dirección (única, igual
+-- que un teléfono) y email = la misma dirección. email_hilo: JSON del último correo recibido para responder en el
+-- mismo hilo ({"id": Message-ID, "asunto": ..., "graph_id": id de Microsoft Graph o null}).
+ALTER TABLE contacto ADD COLUMN email TEXT;
+ALTER TABLE contacto ADD COLUMN email_hilo TEXT;
+CREATE UNIQUE INDEX contacto_email ON contacto(email) WHERE email IS NOT NULL;

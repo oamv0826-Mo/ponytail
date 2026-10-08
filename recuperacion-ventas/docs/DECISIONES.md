@@ -178,3 +178,8 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - Calendario de Microsoft 365 por Graph con permiso de aplicación (`Calendars.ReadWrite`) sobre un buzón de citas, igual que la cuenta de servicio de Google: nadie tiene que iniciar sesión ni renovar tokens.
 - Con Microsoft, un evento "tentativo" bloquea el horario (solo `free` y `workingElsewhere` lo dejan libre): ofrecer un horario dudoso cuesta más que no ofrecerlo.
 - `ocupado_google` pasa a `ocupado_externo` y despacha por proveedor; la lógica de horarios libres no cambia.
+- Correo como canal: el contacto de correo usa su dirección como `telefono` (columna única y NOT NULL ya existente) y `email`; así bajas, bandeja, cola y reportes funcionan sin reconstruir la tabla. Costo: WhatsApp y correo de la misma persona son dos contactos.
+- El buzón se lee en el tick (cada 5 min) y el correo se marca leído solo después de entrar a la cola: perder un correo es peor que leerlo dos veces (la cola deduplica por Message-ID).
+- Se ignoran respuestas automáticas, listas, no-reply, el propio buzón y el equipo: un bot de correo que contesta autorespuestas entra en bucle.
+- De los envíos proactivos solo el recordatorio de cita sale por correo: es transaccional y reduce inasistencias; seguimiento, reactivación y reseñas requieren plantillas aprobadas y consentimiento y se quedan en WhatsApp.
+- Se pide un buzón exclusivo para clientes: todo lo no leído se trata como consulta.

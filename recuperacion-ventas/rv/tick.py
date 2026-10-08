@@ -1,7 +1,7 @@
 """Tick (cada 5 min): avisos y escalamientos, recordatorios, reseñas, seguimiento 2/5/10 y reactivación."""
 import datetime as dt
 
-from . import base, motor, wa
+from . import base, correo, motor, wa
 
 POR_TICK_REACTIVACION = 10   # reparte el lote diario para no saturar al equipo con respuestas simultáneas
 
@@ -9,8 +9,12 @@ POR_TICK_REACTIVACION = 10   # reparte el lote diario para no saturar al equipo 
 MAX_INTENTOS = 3   # fallas del mismo envío en 24 h antes de rendirse
 
 
-def puede_proactivo(con, cfg, c):
-    """Opt-out global y exclusión de equipo/dueño: se revisa antes de cada envío proactivo."""
+def puede_proactivo(con, cfg, c, por_correo=False):
+    """Opt-out global y exclusión de equipo/dueño: se revisa antes de cada envío proactivo. Los contactos de correo
+    solo reciben lo transaccional (recordatorio de su cita, por_correo=True); seguimiento, reactivación y reseñas son
+    de WhatsApp, con plantillas aprobadas y consentimiento."""
+    if base.es_correo(c) and not por_correo:
+        return False
     return c["telefono"] not in cfg.internos and not base.dio_baja(con, c["telefono"])
 
 
@@ -19,8 +23,11 @@ def _plantilla(con, cfg, c, nombre, params):
 
     ponytail: si Meta aceptó el envío pero la respuesta se perdió (timeout), el reintento puede duplicarlo;
     es preferible a no enviar un recordatorio."""
-    if wa.enviar(con, cfg, c["telefono"], plantilla=nombre, params=params, contacto_id=c["id"],
-                 autor="sistema")[1]:
+    if base.es_correo(c):   # mismo texto que la plantilla, en el hilo del cliente
+        ok = motor.responder(con, cfg, motor.contacto(con, c["id"]), wa.texto_plantilla(nombre, params), autor="sistema")[1]
+    else:
+        ok = wa.enviar(con, cfg, c["telefono"], plantilla=nombre, params=params, contacto_id=c["id"], autor="sistema")[1]
+    if ok:
         return "ok"
     fallas = con.execute("SELECT COUNT(*) FROM mensaje WHERE contacto_id=? AND plantilla=? AND estado='error' "
                          "AND creado>?", (c["id"], nombre, base.iso(base.ahora() - dt.timedelta(hours=24)))).fetchone()[0]
@@ -80,7 +87,7 @@ def recordatorios(con, cfg, t):
                 continue
             objetivo = inicio - dt.timedelta(hours=horas)
             # creada dentro del plazo (ya recibió confirmación), dio de baja, o el de 2 h cae fuera de la ventana
-            if (creado >= objetivo or not puede_proactivo(con, cfg, c)
+            if (creado >= objetivo or not puede_proactivo(con, cfg, c, por_correo=True)
                     or (horas == 2 and not base.en_ventana_envio(cfg, objetivo))):
                 con.execute(f"UPDATE cita SET {campo}='omitido' WHERE id=?", (f["id"],))
                 continue
@@ -224,7 +231,18 @@ def reactivacion(con, cfg, t):
     return n
 
 
-PASOS = [avisos_pendientes, escalamientos, recordatorios, resenas, seguimiento, reactivacion]
+# ---------- correo entrante (canal de clientes) ----------
+
+def correo_entrante(con, cfg, t):
+    """Lee el buzón y deja cada correo en la cola; el trabajador del servidor lo contesta en segundos (un solo
+    trabajador mantiene el orden por cliente). A cualquier hora: contestar no es un envío proactivo."""
+    em = cfg["email"]
+    if not em["entrada"]["activa"] or not correo.configurado(cfg) or cfg["modo_prueba"]:
+        return 0
+    return correo.leer_entrada(cfg, lambda item: motor.encolar_correo(con, item))
+
+
+PASOS = [correo_entrante, avisos_pendientes, escalamientos, recordatorios, resenas, seguimiento, reactivacion]
 
 
 def correr(con, cfg):

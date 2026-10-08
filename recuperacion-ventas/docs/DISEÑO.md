@@ -281,3 +281,31 @@ Google: `ocupado_externo` → `ocupados/restar/horarios_libres` (sin cambios) y 
 |---|---|
 | getSchedule (permisos, `schedules`, `availabilityViewInterval`, UTC por omisión) | [calendar-getschedule](https://learn.microsoft.com/en-us/graph/api/calendar-getschedule) |
 | Crear evento (201, permiso de aplicación `Calendars.ReadWrite`, alcance limitable con RBAC) | [calendar-post-events](https://learn.microsoft.com/en-us/graph/api/calendar-post-events) |
+
+### 7.4 Correo como canal de clientes (fase 4)
+
+- **Lectura** (`tick.correo_entrante`, primer paso de cada tick, a cualquier hora): IMAP (`UNSEEN`, `BODY.PEEK[]`,
+  luego `\Seen`) o Graph (`GET /users/{buzón}/mailFolders/inbox/messages?$filter=isRead eq false` con
+  `Prefer: outlook.body-content-type="text"`, luego `PATCH isRead`). Cada correo se marca leído **después** de quedar
+  en la cola `entrada` (clave `e:<Message-ID>`): si el proceso cae, se vuelve a leer y la cola lo descarta. El
+  trabajador del servidor lo contesta en segundos; el tick no procesa la cola para no romper el orden por cliente.
+- **Qué se ignora** (`correo.ignorar`): el propio buzón y los correos del equipo (`avisos_a`, `reporte_a`),
+  `no-reply`/`mailer-daemon`, `Auto-Submitted` distinto de `no`, `X-Autoreply`, `Precedence: bulk/list/junk`,
+  `List-Id`/`List-Unsubscribe`. Así no hay bucles con respuestas automáticas ni se le contesta a boletines.
+- **Texto**: la parte `text/plain` (o el HTML sin etiquetas), sin el historial citado (`El … escribió:`,
+  `On … wrote:`, líneas `>`) ni la firma (`-- `), máximo 4000 caracteres. Un correo vacío usa el asunto.
+- **Contacto**: su `telefono` es la dirección (única, minúsculas) y `email` la misma (esquema v7); `email_hilo` guarda el
+  último `Message-ID`, asunto e id de Graph. Una persona que escribe por WhatsApp y por correo son dos contactos.
+- **Respuesta** (`motor.responder` decide el canal): SMTP con `Re: <asunto>`, `In-Reply-To` y `References`; Microsoft
+  con `POST /messages/{id}/reply` (Graph no deja fijar `In-Reply-To` en `sendMail`). Se guarda como mensaje saliente.
+  Por correo no hay ventana de 24 h: la bandeja siempre deja responder.
+- **Mismo motor**: bajas, urgencia médica, handoff, IA con guardrails, agenda y tope de costo. Proactivos: solo el
+  recordatorio de cita sale por correo (es transaccional y evita inasistencias); seguimiento, reactivación y reseñas
+  siguen solo por WhatsApp.
+- Demo sin cuentas: `simular --de ana@gmail.com --asunto Precio --texto "..."` con el bloque `email` configurado.
+
+| Qué | Documentación |
+|---|---|
+| Listar mensajes no leídos, `Prefer: outlook.body-content-type` | [user-list-messages](https://learn.microsoft.com/graph/api/user-list-messages) |
+| Responder en el hilo (`comment`, 202, permiso `Mail.Send`) | [message-reply](https://learn.microsoft.com/en-us/graph/api/message-reply) |
+| IMAP de Gmail `imap.gmail.com:993` | [guía Gmail IMAP/SMTP](https://smtpedia.com/gmail) (fuente secundaria) |

@@ -200,9 +200,9 @@ def html_conversacion(con, cfg, c, usuario):
     botones = accion("tomar", "Tomar") + (accion("devolver", "Devolver al bot") if c["estado"] == "humano" else
                                           accion("pasar", "Pasar a humano"))
     if abierta:
-        hasta = base.de_iso(c["ultimo_entrante"]) + dt.timedelta(hours=24)
+        hasta = None if base.es_correo(c) else base.de_iso(c["ultimo_entrante"]) + dt.timedelta(hours=24)
         resp = (f"<form method='post' action='{bp}/bandeja/c/{cid}/responder'><label for='t'>Responder "
-                f"(ventana abierta hasta {e(hora_local(cfg, base.iso(hasta)))})</label>"
+                f"({'por correo, en el mismo hilo' if hasta is None else 'ventana abierta hasta ' + e(hora_local(cfg, base.iso(hasta)))})</label>"
                 f"<textarea id='t' name='texto' required maxlength='2000'></textarea><button>Enviar</button></form>")
     elif optout:
         resp = "<p class='aviso'>Ventana de 24 h cerrada y el contacto dio de baja: no se le puede escribir.</p>"

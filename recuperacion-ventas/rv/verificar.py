@@ -173,7 +173,7 @@ def url_webhook(cfg):
     return cfg["url_publica"].rstrip("/") + "/webhook"
 
 
-PERMISOS_MS = {"correo": {"Mail.Send"}, "calendario": {"Calendars.ReadWrite"}}
+PERMISOS_MS = {"correo": {"Mail.Send"}, "entrada": {"Mail.ReadWrite", "Mail.Send"}, "calendario": {"Calendars.ReadWrite"}}
 
 
 def probar_correo(cfg):
@@ -184,11 +184,29 @@ def probar_correo(cfg):
         if faltan:
             raise RuntimeError(f"a la app de Microsoft le falta el permiso de aplicación {', '.join(faltan)} "
                                "con consentimiento de administrador")
-        return f"correo Microsoft 365: token y permiso Mail.Send para {em['remitente']}"
+        if em["entrada"]["activa"]:
+            faltan = PERMISOS_MS["entrada"] - ms.permisos()
+            if faltan:
+                raise RuntimeError(f"para leer y contestar el buzón falta el permiso de aplicación {', '.join(faltan)}")
+            ms.graph("GET", ms.buzon(em["remitente"]) + "/mailFolders/inbox?$select=unreadItemCount")
+        return (f"correo Microsoft 365: token y permisos para {em['remitente']}"
+                + (" (envío y lectura del buzón)" if em["entrada"]["activa"] else " (envío)"))
     with correo.conectar_smtp(cfg):
         pass
     s = em["smtp"]
-    return f"correo SMTP: sesión iniciada en {s['host']}:{s['puerto']} como {correo.usuario_smtp(cfg)}"
+    msg = f"correo SMTP: sesión iniciada en {s['host']}:{s['puerto']} como {correo.usuario_smtp(cfg)}"
+    if em["entrada"]["activa"]:
+        import imaplib
+        import ssl
+        i = em["entrada"]["imap"]
+        con = imaplib.IMAP4_SSL(i["host"], int(i["puerto"]), ssl_context=ssl.create_default_context(), timeout=15)
+        try:
+            con.login(correo.usuario_smtp(cfg), os.environ.get("SMTP_CLAVE", ""))
+            con.select("INBOX", readonly=True)   # solo lectura: no marca nada como leído
+        finally:
+            con.logout()
+        msg += f"; buzón IMAP {i['host']} abierto (solo lectura)"
+    return msg
 
 
 def _correo_cuenta_servicio():

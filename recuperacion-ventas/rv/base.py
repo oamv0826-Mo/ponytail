@@ -68,7 +68,9 @@ DEFAULTS = {
     "whatsapp": {"phone_number_id": "", "waba_id": "", "graph_version": "v23.0"},
     # correo: "" (sin correo) | "smtp" | "microsoft"; avisos_a recibe los mismos avisos que el WhatsApp del equipo
     "email": {"proveedor": "", "remitente": "", "avisos_a": [], "reporte_a": [],
-              "smtp": {"host": "", "puerto": 587, "seguridad": "starttls"}},
+              "smtp": {"host": "", "puerto": 587, "seguridad": "starttls"},
+              # canal de clientes: leer el buzón del remitente y contestar (IMAP con smtp; Graph con microsoft)
+              "entrada": {"activa": False, "imap": {"host": "", "puerto": 993}, "por_tick": 25}},
     "mensajes": {},
 }
 
@@ -138,6 +140,8 @@ class Config(dict):
             errores.append("email.remitente debe ser un correo")
         elif em["proveedor"] == "smtp" and (not em["smtp"]["host"] or em["smtp"]["seguridad"] not in ("starttls", "ssl")):
             errores.append("email.smtp necesita host y seguridad starttls o ssl")
+        elif em["entrada"]["activa"] and em["proveedor"] == "smtp" and not em["entrada"]["imap"]["host"]:
+            errores.append("email.entrada activa con smtp necesita entrada.imap.host (p. ej. imap.gmail.com)")
         if errores:
             raise ValueError("cliente.json inválido: " + "; ".join(errores))
 
@@ -377,8 +381,16 @@ def dio_baja(con, telefono):
     return con.execute("SELECT 1 FROM optout WHERE telefono=?", (telefono,)).fetchone() is not None
 
 
+def es_correo(c):
+    """Contacto que escribe por correo: su 'telefono' es la dirección (ver esquema v7)."""
+    return "@" in (c["telefono"] or "")
+
+
 def ventana_abierta(c):
-    """Ventana de 24 h de Meta para texto libre: abierta si el contacto escribió hace menos de 24 h."""
+    """Ventana de 24 h de Meta para texto libre: abierta si el contacto escribió hace menos de 24 h.
+    Por correo no hay ventana: siempre se le puede contestar."""
+    if es_correo(c):
+        return True
     u = de_iso(c["ultimo_entrante"])
     return bool(u) and ahora() - u < dt.timedelta(hours=24)
 

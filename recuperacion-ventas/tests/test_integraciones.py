@@ -143,3 +143,131 @@ class CalendarioMicrosoft(Caso):
         self.cfg["agenda"]["calendar_id"] = "AAMkAGI2"
         with self.assertRaisesRegex(ValueError, "correo del buzón"):
             self.cfg.validar()
+
+
+CORREO_CLIENTE = (b"From: Ana Ruiz <ana@gmail.com>\r\nTo: citas@clinica.mx\r\nSubject: Precio\r\n"
+                  b"Message-ID: <abc123@mail.gmail.com>\r\nDate: Tue, 06 Oct 2026 09:58:00 -0600\r\n"
+                  b"MIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary=XX\r\n\r\n"
+                  b"--XX\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
+                  b"Hola, \xc2\xbfcu\xc3\xa1nto cuesta la limpieza dental?\r\n\r\n"
+                  b"El lun, 5 oct 2026 a las 10:00, Cl\xc3\xadnica <citas@clinica.mx> escribi\xc3\xb3:\r\n> Hola Ana\r\n"
+                  b"--XX\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>Hola</p>\r\n--XX--\r\n")
+
+
+class CanalCorreo(ConCorreo):
+    CONFIG = {"email": ConCorreo.CONFIG["email"] | {"remitente": "citas@clinica.mx",
+                                                     "entrada": {"activa": True, "imap": {"host": "imap.gmail.com"}}}}
+
+    def imap_falso(self, correos):
+        imap = mock.MagicMock()
+        uids = [str(i + 1).encode() for i in range(len(correos))]
+
+        def uid(cmd, *a):
+            if cmd == "SEARCH":
+                return "OK", [b" ".join(uids)]
+            if cmd == "FETCH":
+                return "OK", [(a[0] + b" (BODY[] {9}", correos[int(a[0]) - 1]), b")"]
+            return "OK", [b""]
+        imap.uid.side_effect = uid
+        return imap
+
+    def leer(self, correos):
+        imap = self.imap_falso(correos)
+        orden = []
+        with mock.patch("imaplib.IMAP4_SSL", return_value=imap):
+            n = correo.leer_entrada(self.cfg, lambda item: orden.append(("guardar", motor.encolar_correo(self.con, item))))
+        motor.procesar_pendientes(self.con, self.cfg)
+        return n, imap, orden
+
+    def test_texto_util_quita_html_cita_y_firma(self):
+        self.assertEqual(correo.texto_util("Hola\n\nOn Mon, Ana wrote:\n> viejo"), "Hola")
+        self.assertEqual(correo.texto_util("<p>Hola &amp; gracias</p><style>p{}</style>", es_html=True), "Hola & gracias")
+        self.assertEqual(correo.texto_util("Quiero cita\n-- \nAna Ruiz\nGerente"), "Quiero cita")
+
+    def test_no_contesta_robots_listas_ni_al_propio_buzon(self):
+        normal = {"From": "x"}
+        self.assertIsNone(correo.ignorar(self.cfg, "ana@gmail.com", normal))
+        for de, cab in (("no-reply@banco.mx", normal), ("ana@gmail.com", {"Auto-Submitted": "auto-replied"}),
+                        ("promo@tienda.mx", {"List-Unsubscribe": "<mailto:x>"}), ("citas@clinica.mx", normal),
+                        ("dueno@clinica.mx", normal), ("ana@gmail.com", {"Precedence": "bulk"})):
+            self.assertIsNotNone(correo.ignorar(self.cfg, de, cab), de)
+
+    def test_correo_por_imap_se_contesta_en_el_mismo_hilo(self):
+        n, imap, orden = self.leer([CORREO_CLIENTE])
+        self.assertEqual(n, 1)
+        cmds = [c.args[0] for c in imap.uid.call_args_list]
+        self.assertEqual(cmds, ["SEARCH", "FETCH", "STORE"])   # leído solo después de guardarlo en la cola
+        self.assertIn("BODY.PEEK[]", imap.uid.call_args_list[1].args[2])
+        c = self.con.execute("SELECT * FROM contacto WHERE email='ana@gmail.com'").fetchone()
+        self.assertEqual((c["telefono"], c["nombre"]), ("ana@gmail.com", "Ana Ruiz"))
+        entrante = self.con.execute("SELECT texto FROM mensaje WHERE direccion='in'").fetchone()["texto"]
+        self.assertEqual(entrante, "Hola, ¿cuánto cuesta la limpieza dental?")   # sin el historial citado
+        salida = [x for x in self.log().splitlines() if "correo:ana@gmail.com" in x]
+        self.assertEqual(len(salida), 1)
+        self.assertIn("\tRe: Precio | ", salida[0])
+        respuesta = self.con.execute("SELECT * FROM mensaje WHERE direccion='out' AND contacto_id=?", (c["id"],)).fetchone()
+        self.assertEqual(respuesta["estado"], "prueba")
+
+    def test_el_mismo_correo_dos_veces_se_contesta_una(self):
+        self.leer([CORREO_CLIENTE])
+        self.leer([CORREO_CLIENTE])
+        self.assertEqual(len([x for x in self.log().splitlines() if "correo:ana@gmail.com" in x]), 1)
+
+    def test_respuesta_automatica_no_crea_contacto_ni_se_contesta(self):
+        auto = CORREO_CLIENTE.replace(b"Subject: Precio", b"Auto-Submitted: auto-replied\r\nSubject: Fuera de oficina")
+        self.leer([auto])
+        self.assertIsNone(self.con.execute("SELECT 1 FROM contacto").fetchone())
+        self.assertNotIn("correo:ana@gmail.com", self.log())
+
+    def test_microsoft_365_lee_marca_leido_y_contesta_con_reply(self):
+        self.cfg["email"]["proveedor"] = "microsoft"
+        g = {"id": "AAMk1", "internetMessageId": "<m1@outlook.com>", "subject": "Cita", "receivedDateTime":
+             "2026-10-06T15:58:00Z", "from": {"emailAddress": {"name": "Luis", "address": "Luis@Outlook.com"}},
+             "body": {"contentType": "text", "content": "Quiero hablar con una persona"}, "internetMessageHeaders": []}
+        with mock.patch.object(ms, "graph", return_value={"value": [g]}) as graph:
+            correo.leer_entrada(self.cfg, lambda item: motor.encolar_correo(self.con, item))
+        get, patch = graph.call_args_list
+        self.assertIn("isRead%20eq%20false", get.args[1])
+        self.assertEqual(get.kwargs["cabeceras"], {"Prefer": 'outlook.body-content-type="text"'})
+        self.assertEqual(patch.args, ("PATCH", "users/citas@clinica.mx/messages/AAMk1", {"isRead": True}))
+        self.cfg["modo_prueba"] = False
+        with mock.patch.object(ms, "graph", return_value={}) as graph, mock.patch("rv.wa._graph", return_value={
+                "messages": [{"id": "wamid.x"}]}):
+            motor.procesar_pendientes(self.con, self.cfg)
+        c = self.con.execute("SELECT * FROM contacto WHERE email='luis@outlook.com'").fetchone()
+        self.assertEqual(c["estado"], "humano")
+        reply = [x for x in graph.call_args_list if x.args[1].endswith("/reply")]
+        self.assertEqual(reply[0].args[1], "users/citas@clinica.mx/messages/AAMk1/reply")
+
+    def test_recordatorio_si_seguimiento_no(self):
+        from rv import tick
+        self.leer([CORREO_CLIENTE])
+        c = self.con.execute("SELECT * FROM contacto WHERE email='ana@gmail.com'").fetchone()
+        self.assertFalse(tick.puede_proactivo(self.con, self.cfg, c))
+        self.assertTrue(tick.puede_proactivo(self.con, self.cfg, c, por_correo=True))
+        inicio = self.t + agenda_dt().timedelta(days=2)
+        self.con.execute("INSERT INTO cita (contacto_id, servicio_id, inicio, fin, estado, creado, creado_por) VALUES "
+                         "(?,?,?,?,?,?,?)", (c["id"], "limpieza", base.iso(inicio), base.iso(inicio + agenda_dt().timedelta(hours=1)),
+                                             "agendada", base.iso(self.t), "bot"))
+        self.t = inicio - agenda_dt().timedelta(hours=23)
+        self.assertEqual(tick.recordatorios(self.con, self.cfg, self.t), 1)
+        self.assertIn("\tRe: Precio | ", self.log().splitlines()[-1])   # por correo, en su hilo
+        self.assertEqual(self.con.execute("SELECT rec24 FROM cita").fetchone()[0], base.iso(self.t))
+        self.con.execute("UPDATE contacto SET seg_activo=1, seg_inicio=? WHERE id=?",
+                         (base.iso(self.t - agenda_dt().timedelta(days=3)), c["id"]))
+        tick.seguimiento(self.con, self.cfg, self.t)
+        self.assertEqual(self.con.execute("SELECT seg_activo FROM contacto WHERE id=?", (c["id"],)).fetchone()[0], 0)
+
+    def test_bandeja_responde_por_correo(self):
+        from rv import web
+        self.leer([CORREO_CLIENTE])
+        self.con.execute("UPDATE contacto SET ultimo_entrante='2026-09-01T10:00:00Z'")   # por correo no hay ventana de 24 h
+        c = self.con.execute("SELECT * FROM contacto WHERE email='ana@gmail.com'").fetchone()
+        self.assertIsNone(web.accion_conversacion(self.con, self.cfg, c, "ana", "responder", {"texto": ["Te esperamos"]}))
+        self.assertIn("Re: Precio | Te esperamos", self.log())
+        self.assertIn("por correo, en el mismo hilo", web.html_conversacion(self.con, self.cfg, c, "ana"))
+
+
+def agenda_dt():
+    import datetime
+    return datetime

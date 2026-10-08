@@ -299,7 +299,8 @@ def reservar(con, cfg, c, servicio_id, inicio, creado_por="bot", reprograma=None
         if not libre(ocupados(con, cfg, inicio, fin, excluir_cita=reprograma), inicio, fin):
             return None
         titulo = f"{cfg.servicios[servicio_id]['nombre']} - {c['nombre'] or 'cliente'} ({c['telefono']})"
-        evento_id = crear_evento(cfg, inicio, fin, titulo, f"Agendada por: {creado_por}. WhatsApp: {c['telefono']}")
+        canal = 'Correo' if base.es_correo(c) else 'WhatsApp'
+        evento_id = crear_evento(cfg, inicio, fin, titulo, f"Agendada por: {creado_por}. {canal}: {c['telefono']}")
         cid = con.execute("INSERT INTO cita (contacto_id, servicio_id, inicio, fin, evento_id, creado, creado_por) "
                           "VALUES (?,?,?,?,?,?,?)", (c["id"], servicio_id, base.iso(inicio), base.iso(fin), evento_id,
                                                      base.iso(base.ahora()), creado_por)).lastrowid

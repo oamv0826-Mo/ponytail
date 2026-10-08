@@ -250,8 +250,24 @@ SMTP en cuentas personales. Usa Gmail o el correo de un dominio propio.
 | Id. de aplicación (cliente) | `MS_CLIENT_ID=...` |
 | Valor del secreto | `MS_CLIENT_SECRET=...` |
 
-Comprueba con `python3 -m rv --cliente <carpeta> verificar --remoto`: inicia sesión en SMTP sin mandar nada, o revisa
-que el token de Microsoft traiga el permiso `Mail.Send`.
+**Correo como canal de clientes (opcional).** Agorá también puede leer el buzón del `remitente` y contestar a los
+clientes que escriben por correo, igual que por WhatsApp (mismas reglas, handoff y bajas; responde en el mismo hilo).
+Usa un buzón **exclusivo para clientes** (por ejemplo `citas@clinica.mx` o `agora.clinica@gmail.com`), nunca el
+correo personal del dueño: todo lo no leído de ese buzón se trata como consulta. Agorá ignora respuestas automáticas,
+boletines y remitentes "no-reply", y lee cada 5 minutos (con el tick).
+
+- Gmail/Zoho/hosting: misma contraseña de aplicación; agrega el servidor IMAP (Gmail: `imap.gmail.com`, puerto 993;
+  si Gmail lo pide, activa IMAP en Configuración → Reenvío y correo POP/IMAP).
+- Microsoft 365: agrega a la app los permisos de aplicación **`Mail.ReadWrite`** (leer y marcar como leído) además de
+  `Mail.Send`, y vuelve a conceder el consentimiento.
+
+```json
+"email": {..., "entrada": {"activa": true, "imap": {"host": "imap.gmail.com", "puerto": 993}}}
+```
+
+Comprueba con `python3 -m rv --cliente <carpeta> verificar --remoto`: inicia sesión en SMTP (y abre el buzón IMAP en
+solo lectura) sin mandar nada, o revisa que el token de Microsoft traiga `Mail.Send` (y `Mail.ReadWrite` si lees el
+buzón).
 
 ---
 

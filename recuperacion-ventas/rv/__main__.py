@@ -26,7 +26,23 @@ def payload_falso(telefono, texto=None, nombre="", tipo="text", msg_id=None):
         "contacts": [{"profile": {"name": nombre}, "wa_id": wa_id}], "messages": [m]}}]}]}
 
 
+def simular_correo(cfg, args, texto):
+    from email.utils import make_msgid
+    if not correo.configurado(cfg):
+        sys.exit("para simular el canal de correo pon en cliente.json email.proveedor (smtp o microsoft) y email.remitente")
+    item = correo._item(cfg, args.de, args.nombre, args.asunto, make_msgid(domain="simulado.mx"), texto,
+                        base.iso(base.ahora()))
+    with base.db(cfg) as con:
+        ultimo = con.execute("SELECT COALESCE(MAX(id),0) FROM mensaje").fetchone()[0]
+        motor.encolar_correo(con, item)
+        motor.procesar_pendientes(con, cfg)
+        for m in con.execute("SELECT * FROM mensaje WHERE id>? AND direccion='out' ORDER BY id", (ultimo,)):
+            print(f"  → {m['telefono']} [{m['autor']}] {m['texto']}")
+
+
 def simular_uno(cfg, args, texto, tipo="text"):
+    if "@" in args.de:   # --de cliente@correo.mx: simula un correo en vez de un WhatsApp
+        return simular_correo(cfg, args, texto)
     cuerpo = json.dumps(payload_falso(args.de, texto, args.nombre, tipo)).encode()
     firma = wa.firmar(wa.app_secret(cfg), cuerpo)
     if args.url:
@@ -177,7 +193,8 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("serve", help="webhook + bandeja web")
     s = sub.add_parser("simular", help="inyecta un mensaje falso de WhatsApp (modo prueba)")
-    s.add_argument("--de", default="+528100000001")
+    s.add_argument("--de", default="+528100000001", help="teléfono, o un correo para simular el canal de correo")
+    s.add_argument("--asunto", default="Consulta", help="asunto del correo simulado")
     s.add_argument("--nombre", default="Cliente de prueba")
     s.add_argument("--texto", default="Hola")
     s.add_argument("--tipo", default="text", choices=["text", "audio", "image"])
