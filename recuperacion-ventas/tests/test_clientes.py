@@ -112,3 +112,128 @@ class Fichas(ConBandeja):
         codigo, h, _ = self.pedir("GET", "/bandeja/clientes")
         self.assertEqual(codigo, 303)
         self.assertIsNone(self.con.execute("SELECT 1 FROM contacto").fetchone())
+
+
+class Cotizaciones(ConBandeja):
+    TEL = "+528100000055"
+
+    def setUp(self):
+        super().setUp()
+        self.escribir("hola", de=self.TEL, nombre="Luis")   # abre la ventana de 24 h
+        self.cid = self.contacto(self.TEL)["id"]
+
+    def nueva(self, filas=(("limpieza", "", "1", ""), ("", "Radiografía", "2", "350.50")), cid=None):
+        form = {k: [f[i] for f in filas] for i, k in enumerate(("servicio", "descripcion", "cantidad", "precio"))}
+        return self.post(f"/bandeja/clientes/{cid or self.cid}/cotizacion", form)
+
+    def q(self, folio="C-0001"):
+        return self.con.execute("SELECT * FROM cotizacion WHERE folio=?", (folio,)).fetchone()
+
+    def test_lineas_total_folios_y_errores(self):
+        self.assertEqual(self.nueva(), f"/bandeja/cotizaciones/{self.q()['id']}")
+        q = self.q()
+        self.assertEqual((q["estado"], q["total_centavos"], q["vigencia_dias"]), ("borrador", 80000 + 70100, 15))
+        lineas = self.con.execute("SELECT descripcion, cantidad, precio_centavos FROM cotizacion_linea ORDER BY id").fetchall()
+        self.assertEqual([tuple(x) for x in lineas], [("Limpieza dental", 1, 80000), ("Radiografía", 2, 35050)])
+        self.nueva()
+        self.assertIsNotNone(self.q("C-0002"))
+        self.assertIn("Falta el precio", self.nueva(filas=(("", "Algo", "1", ""),)))
+        self.assertIn("Cantidad inválida", self.nueva(filas=(("limpieza", "", "0", ""),)))
+        self.assertIn("al menos una línea", self.nueva(filas=(("", "", "1", ""),)))
+        self.assertIn("monto inválido", self.nueva(filas=(("", "X", "1", "abc"),)))
+
+    def test_enviar_por_la_conversacion_aceptar_y_editar_solo_borrador(self):
+        self.nueva()
+        qid = self.q()["id"]
+        self.post(f"/bandeja/cotizaciones/{qid}/guardar", {"servicio": ["limpieza"], "descripcion": [""],
+                                                           "cantidad": ["2"], "precio": [""]})
+        self.assertEqual(self.q()["total_centavos"], 160000)
+        self.assertEqual(self.post(f"/bandeja/cotizaciones/{qid}/enviar", {}), f"/bandeja/cotizaciones/{qid}")
+        enviado = self.con.execute("SELECT * FROM mensaje WHERE direccion='out' ORDER BY id DESC").fetchone()
+        self.assertIn("Cotización C-0001", enviado["texto"])
+        self.assertIn("2 × Limpieza dental: $1,600.00 MXN", enviado["texto"])
+        self.assertIn("Vigente hasta el miércoles 21 de octubre", enviado["texto"])
+        self.assertEqual(self.q()["estado"], "enviada")
+        self.assertIn("Solo un borrador", self.post(f"/bandeja/cotizaciones/{qid}/guardar", {"servicio": ["limpieza"],
+                                                    "descripcion": [""], "cantidad": ["1"], "precio": [""]}))
+        otro = self.con.execute("INSERT INTO contacto (telefono, nombre, creado) VALUES ('+528100000066', 'X', ?)",
+                                (base.iso(self.t),)).lastrowid
+        ajena = self.con.execute("INSERT INTO cita (contacto_id, servicio_id, inicio, fin, creado, creado_por) VALUES "
+                                 "(?, 'limpieza', '2026-10-20T16:00:00Z', '2026-10-20T17:00:00Z', ?, 'bot')",
+                                 (otro, base.iso(self.t))).lastrowid
+        self.assertIn("no es de este cliente", self.post(f"/bandeja/cotizaciones/{qid}/cita", {"cita": str(ajena)}))
+        self.post(f"/bandeja/cotizaciones/{qid}/aceptar", {})
+        q = self.q()
+        self.assertEqual((q["estado"], q["respondida_en"]), ("aceptada", base.iso(self.t)))
+        self.assertIn("Solo una cotización enviada", self.post(f"/bandeja/cotizaciones/{qid}/rechazar", {}))
+        impresa = self.get(f"/bandeja/cotizaciones/{qid}/imprimir")
+        self.assertIn("Cotización C-0001", impresa)
+        self.assertNotIn("<header>", impresa)   # página limpia para imprimir
+        self.assertIn("C-0001", self.get(f"/bandeja/clientes/{self.cid}"))
+
+    def test_ventana_cerrada_correo_plantilla_o_baja(self):
+        from rv import clientes
+        self.nueva()
+        self.t = self.t + dt.timedelta(days=2)   # ventana de 24 h cerrada; martes → jueves 10:00
+        q = self.q()
+        self.assertIsNone(clientes.enviar_cotizacion(self.con, self.cfg, q, "ana"))
+        plantilla = self.con.execute("SELECT plantilla FROM mensaje ORDER BY id DESC").fetchone()[0]
+        self.assertEqual(plantilla, "cotizacion")
+        self.con.execute("UPDATE cotizacion SET estado='borrador', enviada_en=NULL")
+        self.con.execute("UPDATE contacto SET email='luis@gmail.com' WHERE id=?", (self.cid,))
+        self.cfg["email"].update(proveedor="smtp", remitente="citas@clinica.mx")
+        self.cfg["email"]["smtp"]["host"] = "smtp.gmail.com"
+        self.assertIsNone(clientes.enviar_cotizacion(self.con, self.cfg, self.q(), "ana"))
+        self.assertIn("correo:luis@gmail.com\tsistema\tCotización C-0001", (self.dir / "envios-prueba.log").read_text())
+        self.con.execute("UPDATE cotizacion SET estado='borrador', enviada_en=NULL")
+        self.con.execute("UPDATE contacto SET email=NULL WHERE id=?", (self.cid,))
+        self.con.execute("INSERT INTO optout (telefono, creado, origen) VALUES (?, ?, 'whatsapp')", (self.TEL, base.iso(self.t)))
+        self.assertIn("dio de baja", clientes.enviar_cotizacion(self.con, self.cfg, self.q(), "ana"))
+
+    def test_vence_en_el_tick_al_dia_siguiente_de_su_vigencia(self):
+        from rv import tick
+        self.nueva()
+        self.post(f"/bandeja/cotizaciones/{self.q()['id']}/enviar", {})
+        self.t = local(2026, 10, 21, 23, 0)   # último día de vigencia (enviada el 6, 15 días)
+        tick.correr(self.con, self.cfg)
+        self.assertEqual(self.q()["estado"], "enviada")
+        self.t = local(2026, 10, 22, 0, 30)
+        self.assertEqual(tick.correr(self.con, self.cfg)["vencer_cotizaciones"], 1)
+        self.assertEqual(self.q()["estado"], "vencida")
+
+    def test_la_ia_solo_menciona_montos_de_las_cotizaciones_de_ese_cliente(self):
+        from rv import motor
+        self.nueva()
+        self.post(f"/bandeja/cotizaciones/{self.q()['id']}/enviar", {})
+        self.escribir("hola", de="+528100000077", nombre="Otro")
+        otro = self.contacto("+528100000077")
+        r = {"accion": "responder", "texto": "Tu total es de $1,501.00 MXN.", "motivo": "", "intencion": "otro",
+             "servicio_id": ""}
+        motor.ejecutar(self.con, self.cfg, otro, r)
+        self.assertEqual(self.contacto("+528100000077")["handoff_motivo"], "monto_no_config:1,501.00")
+        motor.ejecutar(self.con, self.cfg, self.contacto(self.TEL), r)
+        ultimo = self.con.execute("SELECT texto FROM mensaje WHERE contacto_id=? ORDER BY id DESC", (self.cid,)).fetchone()
+        self.assertEqual(ultimo[0], "Tu total es de $1,501.00 MXN.")
+        self.assertIn("C-0001 por $1,501.00 MXN", motor.datos_sistema(self.con, self.cfg, self.contacto(self.TEL)))
+
+    def test_aceptar_por_mensaje_pasa_a_una_persona_sin_confirmar(self):
+        from rv import motor
+        self.nueva()
+        self.post(f"/bandeja/cotizaciones/{self.q()['id']}/enviar", {})
+        self.escribir("Sí, acepto la cotización", de=self.TEL)
+        c = self.contacto(self.TEL)
+        self.assertEqual((c["estado"], c["handoff_motivo"]), ("humano", "cotizacion:C-0001"))
+        self.assertEqual(self.q()["estado"], "enviada")   # la confirma una persona
+        self.assertIn("respondió a la cotización C-0001", motor.motivo_legible(c["handoff_motivo"]))
+        self.nueva()
+        self.post(f"/bandeja/cotizaciones/{self.q('C-0002')['id']}/enviar", {})
+        self.assertIsNone(motor.motivo_cotizacion(self.con, self.cid, "cotizacion"))   # dos abiertas: no adivina
+        self.assertEqual(motor.motivo_cotizacion(self.con, self.cid, "cotizacion:C-0002"), "cotizacion:C-0002")
+
+
+class ConfigAislada(Caso):
+    def test_cambiar_una_config_no_toca_los_valores_por_omision(self):
+        self.cfg["email"]["smtp"]["host"] = "smtp.uno.mx"
+        self.cfg["cotizaciones"]["vigencia_dias"] = 3
+        otra = base.cargar_config(self.dir)
+        self.assertEqual((otra["email"]["smtp"]["host"], otra["cotizaciones"]["vigencia_dias"]), ("", 15))

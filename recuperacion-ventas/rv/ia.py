@@ -170,9 +170,10 @@ def numeros_permitidos(cfg):
     return {_num(n) for n in re.findall(_NUM, fuente)}
 
 
-def problema_texto(cfg, texto):
-    """Motivo por el que el texto de la IA no puede salir, o None."""
-    permitidos = numeros_permitidos(cfg)
+def problema_texto(cfg, texto, extra=()):
+    """Motivo por el que el texto de la IA no puede salir, o None. extra: montos que solo este cliente puede ver
+    (los de sus cotizaciones abiertas)."""
+    permitidos = numeros_permitidos(cfg) | set(extra)
     for rx in _MONTOS:
         for n in rx.findall(texto):
             if _num(n) not in permitidos:
@@ -210,6 +211,8 @@ def simulada(cfg, texto):
     sid = s["id"] if s else ""
     r = lambda accion, txt="", intencion="otro", motivo="simulada": {  # noqa: E731
         "accion": accion, "texto": txt, "motivo": motivo, "intencion": intencion, "servicio_id": sid}
+    if "cotizacion" in t or " acepto" in f" {t}":
+        return r("humano", motivo="cotizacion")
     if "cancel" in t:
         return r("cancelar_cita", intencion="cancelar")
     if any(w in t for w in ("cambiar", "reprogram", "mover mi cita")):

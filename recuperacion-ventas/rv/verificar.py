@@ -8,7 +8,7 @@ import urllib.request
 from . import agenda, base, correo, ia, ms, wa
 
 PLANTILLAS = ["aviso_equipo", "retomar_contacto", "cita_confirmada", "recordatorio_cita", "seguimiento_1",
-              "seguimiento_2", "seguimiento_3", "reactivacion", "resena"]
+              "seguimiento_2", "seguimiento_3", "reactivacion", "resena", "cotizacion"]
 
 
 def locales(con, cfg):

@@ -365,7 +365,7 @@ def crear_servidor(cfg, host="127.0.0.1", puerto=None):
                     return self.enviar(200, pagina(cfg, "Bandeja", agenda.pagina_citas(con, cfg, usuario, q), usuario))
                 r = clientes.get(con, cfg, usuario, u.path, q)
                 if r:
-                    return self.enviar(200, pagina(cfg, r[0], r[1], usuario))
+                    return self.enviar(200, r[1] if len(r) > 2 else pagina(cfg, r[0], r[1], usuario))
             self.enviar(404, "no encontrado", "text/plain")
 
         # --- POST ---
@@ -396,7 +396,7 @@ def crear_servidor(cfg, host="127.0.0.1", puerto=None):
             if self.headers.get("Origin") != origen:  # anti-CSRF: todo POST de la bandeja debe venir de su origen
                 return self.enviar(403, "origen no permitido", "text/plain")
             try:
-                form = parse_qs(self.leer(MAX_FORM).decode("utf-8", "replace"))
+                form = parse_qs(self.leer(MAX_FORM).decode("utf-8", "replace"), keep_blank_values=True)
             except ValueError:
                 return self.enviar(413)
             with base.db(cfg) as con:

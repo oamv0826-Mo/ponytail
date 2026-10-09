@@ -193,3 +193,29 @@ CREATE TABLE nota_cliente (
   creado TEXT NOT NULL
 );
 CREATE INDEX nota_cliente_contacto ON nota_cliente(contacto_id, id);
+
+-- version: 9
+-- Cotizaciones: folio consecutivo del negocio (C-0001), líneas con precio en centavos, MXN.
+CREATE TABLE cotizacion (
+  id INTEGER PRIMARY KEY,
+  folio TEXT UNIQUE,                           -- 'C-' || id en 4 dígitos; se asigna al crearla
+  contacto_id INTEGER NOT NULL REFERENCES contacto(id),
+  estado TEXT NOT NULL DEFAULT 'borrador' CHECK (estado IN ('borrador', 'enviada', 'aceptada', 'rechazada', 'vencida')),
+  vigencia_dias INTEGER NOT NULL,
+  total_centavos INTEGER NOT NULL DEFAULT 0,
+  creado_por TEXT NOT NULL,
+  creado TEXT NOT NULL,
+  enviada_en TEXT,                             -- la primera vez que se envió; la vigencia cuenta desde aquí
+  respondida_en TEXT,                          -- cuando se marcó aceptada o rechazada
+  cita_id INTEGER REFERENCES cita(id)
+);
+CREATE INDEX cotizacion_contacto ON cotizacion(contacto_id, estado);
+CREATE TABLE cotizacion_linea (
+  id INTEGER PRIMARY KEY,
+  cotizacion_id INTEGER NOT NULL REFERENCES cotizacion(id),
+  servicio_id TEXT,                            -- NULL = línea libre
+  descripcion TEXT NOT NULL,
+  cantidad INTEGER NOT NULL CHECK (cantidad > 0),
+  precio_centavos INTEGER NOT NULL CHECK (precio_centavos > 0)
+);
+CREATE INDEX cotizacion_linea_cot ON cotizacion_linea(cotizacion_id);

@@ -19,6 +19,7 @@ no hay que tocar código.
 | `seguimiento_3` | Marketing | {{1}} nombre, {{2}} servicio de interés | Día 10 |
 | `reactivacion` | Marketing | {{1}} nombre, {{2}} negocio | Campaña a clientes antiguos con consentimiento |
 | `resena` | Marketing | {{1}} nombre, {{2}} negocio, {{3}} link de reseña de Google | 2 h después de "Asistió" |
+| `cotizacion` | Utilidad | {{1}} nombre, {{2}} negocio, {{3}} folio, {{4}} total, {{5}} vigencia | Cotización enviada desde la bandeja con la ventana cerrada y sin correo |
 
 Meta no acepta variables vacías: si el contacto no tiene nombre (raro: WhatsApp manda el nombre de
 perfil y el CSV de importación trae nombre), el código envía `cliente` como respaldo.
@@ -88,3 +89,8 @@ Se envían dentro de la ventana de 24 h, porque el cliente acaba de escribir. Vi
 | `cita_confirmada` | Listo, tu cita de {servicio} quedó para el {fecha}. Te enviaremos un recordatorio. |
 | `confirmar_cancelacion` | ¿Confirmas que cancelamos tu cita de {servicio} del {fecha}? Responde SÍ para cancelar. |
 | `cita_cancelada` | Tu cita del {fecha} quedó cancelada. Si quieres otro horario, dime y te propongo opciones. |
+
+### cotizacion (Utilidad)
+```
+Hola {{1}}, te compartimos la cotización {{3}} de {{2}} por un total de {{4}}, vigente hasta el {{5}}. Responde a este mensaje para recibir el detalle o agendar tu cita.
+```

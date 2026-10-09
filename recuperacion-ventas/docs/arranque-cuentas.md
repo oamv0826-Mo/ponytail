@@ -15,7 +15,7 @@ parecido. Los tiempos son aproximados.
 | # | Cuenta | Costo | Tiempo | Dato que obtienes → dónde va |
 |---|---|---|---|---|
 | 1 | App de Meta con número de prueba | Gratis | 30 min | `phone_number_id`, `waba_id` → `cliente.json` |
-| 2 | Las 9 plantillas en Meta | Gratis | 1 h para someterlas; la aprobación tarda de minutos a días | Nada; solo deben quedar "Activas" |
+| 2 | Las 10 plantillas en Meta | Gratis | 1 h para someterlas; la aprobación tarda de minutos a días | Nada; solo deben quedar "Activas" |
 | 3 | Token permanente de Meta y secreto de la app | Gratis | 20 min | `WA_TOKEN`, `WA_APP_SECRET`, `WA_VERIFY_TOKEN` → `secretos.env` |
 | 4 | Clave de Anthropic con límite de gasto | 5 USD de saldo prepagado (mínimo) | 15 min | `ANTHROPIC_API_KEY` → `secretos.env` |
 | 5 | Cuenta de servicio de Google | Gratis | 20 min | archivo JSON → `GOOGLE_SA_FILE` en `secretos.env` |
@@ -55,7 +55,7 @@ Con los pasos 1 a 6 ya puedes hacer la prueba real desde tu Mac ([prueba-real.md
 | Identificador del número de teléfono (Phone number ID) | `"whatsapp": {"phone_number_id": "..."}` |
 | Identificador de la cuenta de WhatsApp Business (WhatsApp Business Account ID) | `"whatsapp": {"waba_id": "..."}` |
 
-## 2. Someter las 9 plantillas (hazlo en cuanto tengas la app)
+## 2. Someter las 10 plantillas (hazlo en cuanto tengas la app)
 
 **Costo:** gratis. **Tiempo:** alrededor de 1 hora para capturarlas. Meta las revisa en minutos u horas, a veces
 en días, por eso va antes que todo lo demás.

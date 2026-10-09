@@ -1,5 +1,6 @@
 """Config, tiempo/horarios, teléfonos, texto y base de datos. Lo que todos los módulos comparten."""
 import contextlib
+import copy
 import datetime as dt
 import fcntl
 import gzip
@@ -74,6 +75,7 @@ DEFAULTS = {
                           "servidor_autenticacion": ""}},   # id del Authentication-Results de tu servidor (Gmail: solo)
     # pagos en línea que registran la venta solos (webhooks en url_publica/pagos/<proveedor>)
     "pagos": {"stripe": {"activo": False}, "mercadopago": {"activo": False}},
+    "cotizaciones": {"vigencia_dias": 15},
     "mensajes": {},
 }
 
@@ -102,7 +104,7 @@ class Config(dict):
     """cliente.json fusionado sobre DEFAULTS, con atajos de uso común."""
 
     def __init__(self, datos, carpeta="."):
-        super().__init__(_fusionar(DEFAULTS, datos))
+        super().__init__(_fusionar(copy.deepcopy(DEFAULTS), datos))   # copia: nadie modifica los valores por omisión
         self.carpeta = Path(carpeta)
         self.tz = ZoneInfo(self["zona_horaria"])
         self.msg = {**MENSAJES, **self["mensajes"]}

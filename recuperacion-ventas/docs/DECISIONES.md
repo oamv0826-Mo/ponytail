@@ -201,3 +201,10 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - Un cliente dado de alta a mano queda con `origen='importado'` (el CHECK de la tabla no admite otro valor y, sobre todo, no llegó escribiendo: no debe contar como respuesta rápida en la garantía).
 - El teléfono es la llave de la ficha y no se edita desde ella; un número equivocado se corrige dando de alta el correcto (no hay borrado de datos).
 - Notas del equipo solo se agregan, nunca se editan: es el historial de lo que se sabía de un cliente y cuándo.
+- Cotizaciones: la vigencia cuenta desde el primer envío (no desde que se creó el borrador) y vence al terminar el último día; reenviar no la extiende.
+- La IA puede mencionar los montos de las cotizaciones abiertas de ESE cliente (total, precio y subtotal de cada línea) y ningún otro monto fuera del config; aceptar o cambiar una cotización siempre lo confirma una persona (handoff `cotizacion:<folio>`): un "sí" ambiguo no debe comprometer al negocio.
+- Si hay dos o más cotizaciones abiertas y la IA no dice cuál, no se adivina: el handoff queda como cualquier otro de la IA.
+- Envío de cotización fuera de la ventana: primero correo (si la ficha lo tiene), luego la plantilla `cotizacion` (con folio, total y vigencia, sin líneas: Meta no admite listas variables); se respetan bajas y horario de envío.
+- PDF: página HTML para imprimir desde el navegador (sin biblioteca de PDF).
+- Los formularios de la bandeja conservan los campos vacíos (`keep_blank_values`): sin eso, las filas de una cotización se desalineaban.
+- `Config` copia los valores por omisión: antes, modificar `cfg["email"]["smtp"]` en una instancia alteraba los valores por omisión de todo el proceso (encontrado por las pruebas de cotizaciones).

@@ -17,7 +17,7 @@ Paso a paso de cada cuenta, con costo y tiempo: [arranque-cuentas.md](arranque-c
 - [ ] **[dueño]** Número para WhatsApp Business Platform (Cloud API). Si el número ya usa la app de WhatsApp Business, decidir: número nuevo o coexistencia.
 - [ ] Alta del número en tu app de Meta (Embedded Signup o WhatsApp Manager); anotar `phone_number_id` y `waba_id`.
 - [ ] Método de pago en la WABA (los mensajes de plantilla tienen costo en Meta).
-- [ ] Someter las 9 plantillas de `docs/plantillas.md` (idioma `es_MX`); se aprueban en horas o días.
+- [ ] Someter las 10 plantillas de `docs/plantillas.md` (idioma `es_MX`); se aprueban en horas o días.
 - [ ] **[dueño]** Servicios con precio y duración, horario, días cerrados, dirección, preguntas frecuentes → `cliente.json`.
 - [ ] **[dueño]** Aprueba cada respuesta del FAQ y los textos de `mensajes` (revisión en persona).
 - [ ] **[dueño]** Teléfonos del dueño y del equipo (`dueno`, `equipo[]`): reciben avisos y nunca reciben campañas.
@@ -44,7 +44,7 @@ Paso a paso de cada cuenta, con costo y tiempo: [arranque-cuentas.md](arranque-c
 - [ ] `configurar-webhook` (override del número → `url_publica/webhook`); `verificar --remoto` debe marcar OK el override.
 - [ ] Prueba real desde tu celular: precio, cita (aparece en Google Calendar), urgencia, handoff (llega el aviso al equipo).
 - [ ] Primera campaña de reactivación (sale sola en la ventana 9:00–20:00, 50 por día).
-- [ ] Capacitación de 30 min al equipo: bandeja, Tomar/Responder/Devolver, Citas → Asistió → Registrar venta; Clientes → registrar, buscar, ficha (notas, citas, ventas).
+- [ ] Capacitación de 30 min al equipo: bandeja, Tomar/Responder/Devolver, Citas → Asistió → Registrar venta; Clientes → registrar, buscar, ficha (notas, citas, ventas); Cotización → líneas, enviar, marcar aceptada, imprimir.
 
 ## Mensual
 - [ ] Revisar motivos de handoff del reporte y mejorar FAQ/mensajes.

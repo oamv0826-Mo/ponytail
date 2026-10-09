@@ -378,3 +378,19 @@ Maps (costo por consulta); no se construyó sin la decisión del dueño.
   es la llave y no se edita; el correo de un contacto de correo tampoco), citas futuras con el formulario de agendar
   de siempre (`agenda.html_agendar`), citas pasadas, ventas (`ventas.html_ventas_conversacion`), cotizaciones y saldo,
   y notas del equipo (`nota_cliente`: solo se agregan; la más reciente arriba). La conversación y la ficha se enlazan.
+
+### 8.2 Cotizaciones (esquema v9)
+
+- Desde la ficha: "Nueva cotización" con hasta 5 líneas (servicio del config con su precio, editable, o línea libre
+  con descripción y precio). Montos en centavos con `ventas.a_centavos`; total = Σ cantidad × precio. Folio
+  `C-0001` consecutivo a partir del id (dos personas creando a la vez no chocan).
+- `/bandeja/cotizaciones/<id>`: el borrador se edita; enviar, reenviar, marcar aceptada o rechazada (desde enviada o
+  vencida), ligar una cita del mismo cliente. `/imprimir`: HTML limpio para "Imprimir → Guardar como PDF".
+- Envío (`enviar_cotizacion`): por la conversación si se le puede escribir (ventana de 24 h abierta, o cliente de
+  correo); si no, por correo si la ficha tiene uno; si no, plantilla `cotizacion` (utilidad, requiere aprobación de
+  Meta), respetando bajas y horario de envío. La vigencia (15 días por omisión, `cotizaciones.vigencia_dias`) cuenta
+  desde el primer envío; el tick la marca `vencida` el día siguiente al último día de vigencia.
+- IA: `datos_sistema` incluye las cotizaciones enviadas y vigentes del cliente; `ia.problema_texto` acepta esos
+  montos (total, precios y subtotales) solo para ese cliente. Si el cliente acepta o quiere cambiar una cotización,
+  la IA usa `humano` con `cotizacion:<folio>`; `motor.motivo_cotizacion` solo acepta un folio abierto de ese cliente
+  (o el único abierto) y nunca la marca aceptada: la confirma una persona.

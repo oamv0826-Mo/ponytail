@@ -8,7 +8,7 @@ noche (para el mensaje fuera de horario) y otra al día siguiente entre 10:00 y 
 
 ## Qué necesitas
 
-- Los pasos 1 a 6 de [arranque-cuentas.md](arranque-cuentas.md). Las 9 plantillas deben estar **Activas**.
+- Los pasos 1 a 6 de [arranque-cuentas.md](arranque-cuentas.md). Las 10 plantillas deben estar **Activas**.
 - Dos teléfonos dados de alta como destinatarios del número de prueba: el tuyo (hace de cliente) y otro que hace de
   dueño o recepción. **No pueden ser el mismo**: el sistema ignora los mensajes que vienen del dueño o del equipo.
 - Python 3.11 o más reciente. La Mac trae uno más viejo. Instálalo con `brew install python@3.12`, o con el

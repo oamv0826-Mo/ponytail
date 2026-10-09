@@ -33,7 +33,7 @@ origen se rechazan.
 
 | Comando | Para qué |
 |---|---|
-| `serve` | webhook de Meta + bandeja web (servicio `rv@<id>`): conversaciones, citas y fichas de clientes (`/bandeja/clientes`) |
+| `serve` | webhook de Meta + bandeja web (servicio `rv@<id>`): conversaciones, citas, fichas de clientes (`/bandeja/clientes`) y cotizaciones |
 | `tick` | envíos programados (timer cada 5 min) |
 | `simular` | mensaje falso de WhatsApp, o de correo con `--de cliente@correo.mx --asunto ...` (solo modo prueba) |
 | `usuario <nombre>` | crea o cambia la contraseña de la bandeja |

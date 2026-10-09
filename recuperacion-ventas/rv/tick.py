@@ -1,7 +1,7 @@
 """Tick (cada 5 min): avisos y escalamientos, recordatorios, reseñas, seguimiento 2/5/10 y reactivación."""
 import datetime as dt
 
-from . import base, correo, motor, wa
+from . import base, clientes, correo, motor, wa
 
 POR_TICK_REACTIVACION = 10   # reparte el lote diario para no saturar al equipo con respuestas simultáneas
 
@@ -242,7 +242,8 @@ def correo_entrante(con, cfg, t):
     return correo.leer_entrada(cfg, lambda item: motor.encolar_correo(con, item))
 
 
-PASOS = [correo_entrante, avisos_pendientes, escalamientos, recordatorios, resenas, seguimiento, reactivacion]
+PASOS = [correo_entrante, avisos_pendientes, escalamientos, recordatorios, resenas, seguimiento, reactivacion,
+         clientes.vencer_cotizaciones]
 
 
 def correr(con, cfg):

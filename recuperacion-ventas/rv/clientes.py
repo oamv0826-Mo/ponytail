@@ -1,10 +1,10 @@
-"""Fichas de clientes en la bandeja: alta a mano, datos, notas del equipo, citas pasadas y futuras, ventas."""
+"""Fichas de clientes en la bandeja (alta a mano, datos, notas, citas, ventas) y cotizaciones."""
 import datetime as dt
 import html
 import re
 from urllib.parse import quote
 
-from . import agenda, base, motor, ventas
+from . import agenda, base, correo, motor, ventas, wa
 
 e = html.escape
 
@@ -150,14 +150,255 @@ def html_ficha(con, cfg, c, usuario, error=""):
             + (f"<ul>{lista_notas}</ul>" if lista_notas else ""))
 
 
+# ---------- cotizaciones ----------
+
+ESTADOS_COT = {"borrador": "Borrador", "enviada": "Enviada", "aceptada": "Aceptada", "rechazada": "Rechazada",
+               "vencida": "Vencida"}
+FILAS_FORM = 5
+
+
+def cotizacion(con, qid):
+    return con.execute("SELECT * FROM cotizacion WHERE id=?", (qid,)).fetchone()
+
+
+def lineas(con, qid):
+    return con.execute("SELECT * FROM cotizacion_linea WHERE cotizacion_id=? ORDER BY id", (qid,)).fetchall()
+
+
+def lineas_de_form(cfg, form):
+    """Filas del formulario → ([(servicio_id, descripcion, cantidad, precio_centavos)], error). Una fila con servicio
+    y sin precio toma el precio del config; una fila libre necesita descripción y precio."""
+    campos = [form.get(k) or [] for k in ("servicio", "descripcion", "cantidad", "precio")]
+    filas = []
+    for servicio, desc, cant, precio in zip(*[x + [""] * (max(map(len, campos)) - len(x)) for x in campos]):
+        servicio, desc, cant, precio = (x.strip() for x in (servicio, desc, cant, precio))
+        if not servicio and not desc:
+            continue
+        s = cfg.servicios.get(servicio)
+        if servicio and not s:
+            return None, f"Servicio desconocido: {servicio}"
+        if not cant.isdigit() or not 1 <= int(cant) <= 999:
+            return None, f"Cantidad inválida en «{desc or s['nombre']}» (1 a 999)."
+        try:
+            centavos = ventas.a_centavos(precio) if precio else round(float(s["precio_mxn"]) * 100) if s else None
+        except ValueError as ex:
+            return None, f"{ex} en «{desc or s['nombre']}»."
+        if not centavos:
+            return None, f"Falta el precio de «{desc}»."
+        filas.append((servicio or None, (desc or s["nombre"])[:120], int(cant), centavos))
+    return (filas, None) if filas else (None, "Agrega al menos una línea.")
+
+
+def guardar_cotizacion(con, cfg, c, usuario, form, qid=None):
+    """Crea un borrador (qid=None) o reemplaza las líneas de uno. Devuelve (qid, error)."""
+    filas, error = lineas_de_form(cfg, form)
+    if error:
+        return qid, error
+    total = sum(cant * precio for _, _, cant, precio in filas)
+    if qid is None:
+        qid = con.execute("INSERT INTO cotizacion (contacto_id, vigencia_dias, total_centavos, creado_por, creado) "
+                          "VALUES (?,?,?,?,?)", (c["id"], int(cfg["cotizaciones"]["vigencia_dias"]), total, usuario,
+                                                  base.iso(base.ahora()))).lastrowid
+        # folio consecutivo del negocio a partir del id (sin carreras entre dos personas del equipo)
+        con.execute("UPDATE cotizacion SET folio=printf('C-%04d', id) WHERE id=?", (qid,))
+    else:
+        con.execute("DELETE FROM cotizacion_linea WHERE cotizacion_id=?", (qid,))   # líneas de un borrador
+        con.execute("UPDATE cotizacion SET total_centavos=? WHERE id=?", (total, qid))
+    con.executemany("INSERT INTO cotizacion_linea (cotizacion_id, servicio_id, descripcion, cantidad, precio_centavos) "
+                    "VALUES (?,?,?,?,?)", [(qid, *f) for f in filas])
+    return qid, None
+
+
+def vigente_hasta(cfg, q):
+    """Último día (local) en que vale la cotización; None si no se ha enviado."""
+    if not q["enviada_en"]:
+        return None
+    return base.de_iso(q["enviada_en"]).astimezone(cfg.tz).date() + dt.timedelta(days=q["vigencia_dias"])
+
+
+def texto_cotizacion(con, cfg, q):
+    filas = "\n".join(f"- {l['cantidad']} × {l['descripcion']}: {ventas._pesos(l['cantidad'] * l['precio_centavos'])}"
+                      for l in lineas(con, q["id"]))
+    hasta = vigente_hasta(cfg, q) or base.ahora().astimezone(cfg.tz).date() + dt.timedelta(days=q["vigencia_dias"])
+    return (f"Cotización {q['folio']} de {cfg['nombre']}:\n{filas}\nTotal: {ventas._pesos(q['total_centavos'])}\n"
+            f"Vigente hasta el {base.fecha_humana(cfg, dt.datetime.combine(hasta, dt.time(12), cfg.tz), con_hora=False)}."
+            " Responde a este mensaje si quieres agendar o tienes dudas.")
+
+
+def enviar_cotizacion(con, cfg, q, usuario):
+    """Por la conversación si se le puede escribir (ventana de 24 h, o correo); si no, por correo si tiene; si no,
+    con la plantilla 'cotizacion' (requiere aprobación de Meta). Devuelve error o None."""
+    if q["estado"] not in ("borrador", "enviada"):
+        return f"La cotización está {ESTADOS_COT[q['estado']].lower()}: no se puede enviar."
+    c = motor.contacto(con, q["contacto_id"])
+    q = dict(q) | {"enviada_en": q["enviada_en"] or base.iso(base.ahora())}
+    texto = texto_cotizacion(con, cfg, q)
+    if base.ventana_abierta(c):
+        ok = motor.responder(con, cfg, c, texto, autor=f"humano:{usuario}")[1]
+        canal = "conversación"
+    elif c["email"] and correo.configurado(cfg):
+        ok = correo.enviar(cfg, [c["email"]], f"Cotización {q['folio']} · {cfg['nombre']}", texto)[1] is None
+        canal = "correo"
+    elif base.dio_baja(con, c["telefono"]):
+        return "El contacto dio de baja y no tiene correo: no se le puede enviar."
+    elif not base.en_ventana_envio(cfg, base.ahora()):
+        return "Ventana de 24 h cerrada y fuera del horario de envío (9:00 a 20:00, lunes a sábado)."
+    else:
+        hasta = vigente_hasta(cfg, q)
+        ok = wa.enviar(con, cfg, c["telefono"], plantilla="cotizacion", contacto_id=c["id"], autor=f"humano:{usuario}",
+                       params=[c["nombre"], cfg["nombre"], q["folio"], ventas._pesos(q["total_centavos"]),
+                               hasta.strftime("%d/%m/%Y")])[1]
+        canal = "plantilla"
+    if not ok:
+        return "No se pudo enviar (ver el error en la conversación o en el log)."
+    con.execute("UPDATE cotizacion SET estado='enviada', enviada_en=? WHERE id=?", (q["enviada_en"], q["id"]))
+    base.evento(con, c["id"], "cotizacion", f"{q['folio']}:{canal}")
+    return None
+
+
+def marcar(con, q, estado):
+    if q["estado"] not in ("enviada", "vencida"):
+        return "Solo una cotización enviada (o vencida) se marca como aceptada o rechazada."
+    con.execute("UPDATE cotizacion SET estado=?, respondida_en=? WHERE id=?", (estado, base.iso(base.ahora()), q["id"]))
+    return None
+
+
+def ligar_cita(con, q, form):
+    cita = _campo(form, "cita")
+    if cita and not (cita.isdigit() and con.execute("SELECT 1 FROM cita WHERE id=? AND contacto_id=?",
+                                                    (int(cita), q["contacto_id"])).fetchone()):
+        return "La cita no es de este cliente."
+    con.execute("UPDATE cotizacion SET cita_id=? WHERE id=?", (int(cita) if cita else None, q["id"]))
+    return None
+
+
+def vencer_cotizaciones(con, cfg, t):
+    """Paso del tick: una cotización enviada pasa a 'vencida' el día después de su vigencia."""
+    hoy, n = t.astimezone(cfg.tz).date(), 0
+    for q in con.execute("SELECT * FROM cotizacion WHERE estado='enviada'").fetchall():
+        if hoy > vigente_hasta(cfg, q):
+            n += con.execute("UPDATE cotizacion SET estado='vencida' WHERE id=? AND estado='enviada'", (q["id"],)).rowcount
+    return n
+
+
+def abiertas(con, cid):
+    """Enviadas y no vencidas: las que el cliente puede estar contestando."""
+    return con.execute("SELECT * FROM cotizacion WHERE contacto_id=? AND estado='enviada' ORDER BY id", (cid,)).fetchall()
+
+
+def montos_cotizados(con, cid):
+    """Montos (pesos) que la IA puede mencionar a ESTE cliente: totales, precios y subtotales de sus cotizaciones
+    abiertas. A nadie más."""
+    montos = set()
+    for q in abiertas(con, cid):
+        montos.add(q["total_centavos"] / 100)
+        for l in lineas(con, q["id"]):
+            montos |= {l["precio_centavos"] / 100, l["cantidad"] * l["precio_centavos"] / 100}
+    return montos
+
+
+def contexto_ia(con, cfg, cid):
+    qs = abiertas(con, cid)
+    if not qs:
+        return ""
+    lista = "; ".join(f"{q['folio']} por {ventas._pesos(q['total_centavos'])}, vigente hasta "
+                      f"{vigente_hasta(cfg, q).isoformat()}" for q in qs)
+    return (f" Cotizaciones enviadas al cliente: {lista}. Si el cliente acepta una cotización o quiere cambiarla, "
+            f"usa accion=humano con motivo 'cotizacion:<folio>'; no la confirmes tú.")
+
+
+def _form_lineas(cfg, filas=()):
+    opciones = lambda sel: "<option value=''>— libre —</option>" + "".join(   # noqa: E731
+        f"<option value='{e(s['id'])}' {'selected' if s['id'] == sel else ''}>{e(s['nombre'])} "
+        f"(${s['precio_mxn']:,})</option>" for s in cfg.servicios.values())
+    filas = list(filas) + [None] * max(FILAS_FORM - len(filas), 2)
+    return "<table><tr><th>Servicio</th><th>Descripción</th><th>Cant.</th><th>Precio c/u (vacío = el del servicio)</th></tr>" + "".join(
+        f"<tr><td><select name='servicio'>{opciones(l['servicio_id'] if l else '')}</select></td>"
+        f"<td><input name='descripcion' maxlength='120' value='{e(l['descripcion']) if l else ''}'></td>"
+        f"<td><input name='cantidad' size='3' inputmode='numeric' value='{l['cantidad'] if l else 1}'></td>"
+        f"<td><input name='precio' size='9' inputmode='decimal' value='{l['precio_centavos'] / 100 if l else ''}'></td></tr>"
+        for l in filas) + "</table>"
+
+
 def html_cotizaciones(con, cfg, c):
-    return "<h2>Cotizaciones y saldo</h2><p>Próximamente.</p>"
+    bp = e(cfg.base_path)
+    qs = con.execute("SELECT * FROM cotizacion WHERE contacto_id=? ORDER BY id DESC", (c["id"],)).fetchall()
+    filas = "".join(f"<tr><td><a href='{bp}/bandeja/cotizaciones/{q['id']}'>{e(q['folio'])}</a></td>"
+                    f"<td>{ESTADOS_COT[q['estado']]}</td><td>{ventas._pesos(q['total_centavos'])}</td>"
+                    f"<td>{e(str(vigente_hasta(cfg, q) or '—'))}</td>{html_saldo_fila(con, q)}</tr>" for q in qs)
+    return (f"<h2>Cotizaciones</h2>{html_saldo_cliente(con, c)}"
+            + (f"<table><tr><th>Folio</th><th>Estado</th><th>Total</th><th>Vigente hasta</th>{html_saldo_cab()}</tr>"
+               f"{filas}</table>" if qs else "<p>Sin cotizaciones.</p>")
+            + f"<details><summary>Nueva cotización</summary><form method='post' "
+              f"action='{bp}/bandeja/clientes/{c['id']}/cotizacion'>{_form_lineas(cfg)}<button>Guardar borrador</button>"
+              f"</form></details>")
+
+
+def html_saldo_cab():
+    return ""
+
+
+def html_saldo_fila(con, q):
+    return ""
+
+
+def html_saldo_cliente(con, c):
+    return ""
+
+
+def html_cotizacion(con, cfg, q, error=""):
+    bp, qid = e(cfg.base_path), q["id"]
+    c = motor.contacto(con, q["contacto_id"])
+    boton = lambda accion, texto: (f"<form class='inline' method='post' action='{bp}/bandeja/cotizaciones/{qid}/{accion}'>"  # noqa: E731
+                                   f"<button>{texto}</button></form>")
+    detalle = "".join(f"<tr><td>{l['cantidad']}</td><td>{e(l['descripcion'])}</td><td>{ventas._pesos(l['precio_centavos'])}"
+                      f"</td><td>{ventas._pesos(l['cantidad'] * l['precio_centavos'])}</td></tr>" for l in lineas(con, qid))
+    if q["estado"] == "borrador":
+        acciones = (f"<h2>Editar</h2><form method='post' action='{bp}/bandeja/cotizaciones/{qid}/guardar'>"
+                    f"{_form_lineas(cfg, lineas(con, qid))}<button>Guardar</button></form><p>{boton('enviar', 'Enviar al cliente')}</p>")
+    elif q["estado"] in ("enviada", "vencida"):
+        acciones = (f"<p>{boton('aceptar', 'Marcar aceptada')}{boton('rechazar', 'Marcar rechazada')}"
+                    + (boton("enviar", "Reenviar") if q["estado"] == "enviada" else "") + "</p>")
+    else:
+        acciones = ""
+    citas = con.execute("SELECT * FROM cita WHERE contacto_id=? AND estado<>'cancelada' ORDER BY inicio DESC LIMIT 20",
+                        (c["id"],)).fetchall()
+    opciones = "<option value=''>— ninguna —</option>" + "".join(
+        f"<option value='{x['id']}' {'selected' if x['id'] == q['cita_id'] else ''}>"
+        f"{e(base.fecha_humana(cfg, base.de_iso(x['inicio'])))} · {e(cfg.nombre_servicio(x['servicio_id']))}</option>"
+        for x in citas)
+    return (f"<h1>Cotización {e(q['folio'])}</h1>{'<p class=err>' + e(error) + '</p>' if error else ''}"
+            f"<p><a href='{bp}/bandeja/clientes/{c['id']}'>{e(c['nombre'] or c['telefono'])}</a> · "
+            f"{ESTADOS_COT[q['estado']]} · vigente hasta {e(str(vigente_hasta(cfg, q) or '(al enviarse)'))} · "
+            f"<a href='{bp}/bandeja/cotizaciones/{qid}/imprimir'>Imprimir</a></p>"
+            f"<table><tr><th>Cant.</th><th>Descripción</th><th>Precio</th><th>Importe</th></tr>{detalle}"
+            f"<tr><th colspan='3'>Total</th><th>{ventas._pesos(q['total_centavos'])}</th></tr></table>{acciones}"
+            f"<form method='post' action='{bp}/bandeja/cotizaciones/{qid}/cita'><label>Cita de esta cotización "
+            f"<select name='cita'>{opciones}</select></label> <button>Guardar</button></form>")
+
+
+def html_imprimir(con, cfg, q):
+    c = motor.contacto(con, q["contacto_id"])
+    filas = "".join(f"<tr><td>{l['cantidad']}</td><td>{e(l['descripcion'])}</td><td class=n>{ventas._pesos(l['precio_centavos'])}"
+                    f"</td><td class=n>{ventas._pesos(l['cantidad'] * l['precio_centavos'])}</td></tr>" for l in lineas(con, q["id"]))
+    hoy = base.ahora().astimezone(cfg.tz).date()
+    return (f"<!doctype html><html lang='es'><head><meta charset='utf-8'><title>Cotización {e(q['folio'])}</title>"
+            "<style>body{font:14px/1.5 system-ui,sans-serif;max-width:720px;margin:32px auto;color:#111}"
+            "table{width:100%;border-collapse:collapse}td,th{padding:6px;border-bottom:1px solid #ccc;text-align:left}"
+            ".n{text-align:right}@media print{a{display:none}}</style></head><body>"
+            f"<h1>{e(cfg['nombre'])}</h1><p>{e(cfg.get('direccion', ''))}</p>"
+            f"<h2>Cotización {e(q['folio'])}</h2><p>Para: {e(c['nombre'] or c['telefono'])} · Fecha: {hoy.isoformat()}"
+            f" · Vigente hasta: {e(str(vigente_hasta(cfg, q) or hoy + dt.timedelta(days=q['vigencia_dias'])))}</p>"
+            f"<table><tr><th>Cant.</th><th>Descripción</th><th class=n>Precio</th><th class=n>Importe</th></tr>{filas}"
+            f"<tr><th colspan='3'>Total (MXN)</th><th class=n>{ventas._pesos(q['total_centavos'])}</th></tr></table>"
+            "<p><a href='javascript:print()'>Imprimir o guardar como PDF</a></p></body></html>")
 
 
 # ---------- rutas (las llama web.py ya con sesión iniciada; los POST ya pasaron el chequeo de Origin) ----------
 
 def get(con, cfg, usuario, ruta, q):
-    """(título, cuerpo) de una página de clientes, o None si la ruta no es de este módulo."""
+    """(título, cuerpo[, crudo]) de una página de clientes, o None si la ruta no es de este módulo. crudo=True: la
+    página ya está completa (la de imprimir), sin el encabezado de la bandeja."""
     error = (q.get("error") or [""])[0]
     if ruta == "/bandeja/clientes":
         return "Clientes", html_lista(con, cfg, (q.get("q") or [""])[0].strip()[:100])
@@ -167,6 +408,14 @@ def get(con, cfg, usuario, ruta, q):
     if m:
         c = motor.contacto(con, int(m.group(1)))
         return (c["nombre"] or c["telefono"], html_ficha(con, cfg, c, usuario, error)) if c else ("No existe", "<p>No existe.</p>")
+    m = re.fullmatch(r"/bandeja/cotizaciones/(\d+)(/imprimir)?", ruta)
+    if m:
+        cot = cotizacion(con, int(m.group(1)))
+        if not cot:
+            return "No existe", "<p>No existe.</p>"
+        if m.group(2):
+            return cot["folio"], html_imprimir(con, cfg, cot), True
+        return f"Cotización {cot['folio']}", html_cotizacion(con, cfg, cot, error)
     return None
 
 
@@ -181,4 +430,27 @@ def post(con, cfg, usuario, ruta, form):
             return "/bandeja/clientes"
         error = guardar_datos(con, cfg, c, form) if m.group(2) == "datos" else agregar_nota(con, c, usuario, form)
         return _ruta_ficha(c["id"], error)
+    m = re.fullmatch(r"/bandeja/clientes/(\d+)/cotizacion", ruta)
+    if m:
+        c = motor.contacto(con, int(m.group(1)))
+        if not c:
+            return "/bandeja/clientes"
+        qid, error = guardar_cotizacion(con, cfg, c, usuario, form)
+        return _ruta_ficha(c["id"], error) if error else f"/bandeja/cotizaciones/{qid}"
+    m = re.fullmatch(r"/bandeja/cotizaciones/(\d+)/(guardar|enviar|aceptar|rechazar|cita)", ruta)
+    if m:
+        q = cotizacion(con, int(m.group(1)))
+        if not q:
+            return "/bandeja/clientes"
+        accion = m.group(2)
+        if accion == "guardar":
+            error = (guardar_cotizacion(con, cfg, motor.contacto(con, q["contacto_id"]), usuario, form, q["id"])[1]
+                     if q["estado"] == "borrador" else "Solo un borrador se puede editar.")
+        elif accion == "enviar":
+            error = enviar_cotizacion(con, cfg, q, usuario)
+        elif accion == "cita":
+            error = ligar_cita(con, q, form)
+        else:
+            error = marcar(con, q, "aceptada" if accion == "aceptar" else "rechazada")
+        return f"/bandeja/cotizaciones/{q['id']}" + (f"?error={quote(error)}" if error else "")
     return None
