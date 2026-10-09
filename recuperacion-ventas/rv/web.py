@@ -12,7 +12,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, urlparse
 
-from . import agenda, base, motor, pagos, ventas, wa
+from . import agenda, base, clientes, motor, pagos, ventas, wa
 
 MAX_WEBHOOK = 1_000_000
 MAX_FORM = 64_000
@@ -129,7 +129,7 @@ def pagina(cfg, titulo, cuerpo, usuario=None):
     cab = ""
     if usuario:
         cab = (f"<header><strong>{e(cfg['nombre'])}</strong><nav><a href='{bp}/bandeja'>Conversaciones</a>"
-               f"<a href='{bp}/bandeja/citas'>Citas</a></nav><span>{e(usuario)}</span>"
+               f"<a href='{bp}/bandeja/citas'>Citas</a><a href='{bp}/bandeja/clientes'>Clientes</a></nav><span>{e(usuario)}</span>"
                f"<form class='inline' method='post' action='{bp}/bandeja/salir'><button>Salir</button></form></header>")
     return (f"<!doctype html><html lang='es'><head><meta charset='utf-8'><meta name='viewport' "
             f"content='width=device-width,initial-scale=1'><title>{e(titulo)}</title><style>{CSS}</style></head>"
@@ -196,7 +196,8 @@ def html_conversacion(con, cfg, c, usuario):
     info = (f"<h1>{e(c['nombre'] or c['telefono'])}</h1><p>{e(c['telefono'])} · Atiende: "
             f"<strong>{'Humano' if c['estado'] == 'humano' else 'Bot'}</strong>"
             f"{' (' + e(motor.motivo_legible(c['handoff_motivo'])) + ')' if c['estado'] == 'humano' and c['handoff_motivo'] else ''}"
-            f" · Tomada por: {e(c['asignado_a'] or 'nadie')}{' · <strong>Dio de baja</strong>' if optout else ''}</p>")
+            f" · Tomada por: {e(c['asignado_a'] or 'nadie')}{' · <strong>Dio de baja</strong>' if optout else ''}"
+            f" · <a href='{bp}/bandeja/clientes/{cid}'>Ficha del cliente</a></p>")
     botones = accion("tomar", "Tomar") + (accion("devolver", "Devolver al bot") if c["estado"] == "humano" else
                                           accion("pasar", "Pasar a humano"))
     if abierta:
@@ -362,6 +363,9 @@ def crear_servidor(cfg, host="127.0.0.1", puerto=None):
                     return self.media(con, int(m.group(1)))
                 if u.path == "/bandeja/citas":
                     return self.enviar(200, pagina(cfg, "Bandeja", agenda.pagina_citas(con, cfg, usuario, q), usuario))
+                r = clientes.get(con, cfg, usuario, u.path, q)
+                if r:
+                    return self.enviar(200, pagina(cfg, r[0], r[1], usuario))
             self.enviar(404, "no encontrado", "text/plain")
 
         # --- POST ---
@@ -415,6 +419,9 @@ def crear_servidor(cfg, host="127.0.0.1", puerto=None):
                     return self.redirigir(destino)
                 if u.path == "/bandeja/citas/marcar":
                     return self.redirigir(agenda.marcar_cita(con, cfg, usuario, form) or "/bandeja")
+                destino = clientes.post(con, cfg, usuario, u.path, form)
+                if destino:
+                    return self.redirigir(destino)
             self.enviar(404, "no encontrado", "text/plain")
 
         def media(self, con, mensaje_id):

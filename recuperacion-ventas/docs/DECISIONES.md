@@ -197,3 +197,7 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - Mercado Pago: se exige `x-request-id` y se deduplica por él (va dentro de la firma), para que un aviso capturado no se pueda repetir.
 - Reseñas de Google: se quedan manuales (`--resenas-google`). La API de Business Profile exige una aprobación de Google que nadie tiene y OAuth del dueño; construir el cliente sin poder probarlo sería adivinar. La alternativa por Places API cuesta dinero por consulta y requiere cuenta de facturación: queda para que el dueño decida.
 - DMARC: un encabezado con comillas o barras invertidas no se interpreta (no verificado), y se exige exactamente un resultado `dmarc` con propiedades bien formadas y un solo `header.from`: cualquier ambigüedad cae del lado seguro (lo atiende una persona).
+- Fichas: módulo `rv/clientes.py` con dos puntos de entrada (`get`/`post`) que `web.py` llama después del login y del chequeo de Origin; así la seguridad de la bandeja no se duplica.
+- Un cliente dado de alta a mano queda con `origen='importado'` (el CHECK de la tabla no admite otro valor y, sobre todo, no llegó escribiendo: no debe contar como respuesta rápida en la garantía).
+- El teléfono es la llave de la ficha y no se edita desde ella; un número equivocado se corrige dando de alta el correcto (no hay borrado de datos).
+- Notas del equipo solo se agregan, nunca se editan: es el historial de lo que se sabía de un cliente y cuándo.

@@ -44,7 +44,7 @@ Paso a paso de cada cuenta, con costo y tiempo: [arranque-cuentas.md](arranque-c
 - [ ] `configurar-webhook` (override del número → `url_publica/webhook`); `verificar --remoto` debe marcar OK el override.
 - [ ] Prueba real desde tu celular: precio, cita (aparece en Google Calendar), urgencia, handoff (llega el aviso al equipo).
 - [ ] Primera campaña de reactivación (sale sola en la ventana 9:00–20:00, 50 por día).
-- [ ] Capacitación de 30 min al equipo: bandeja, Tomar/Responder/Devolver, Citas → Asistió → Registrar venta.
+- [ ] Capacitación de 30 min al equipo: bandeja, Tomar/Responder/Devolver, Citas → Asistió → Registrar venta; Clientes → registrar, buscar, ficha (notas, citas, ventas).
 
 ## Mensual
 - [ ] Revisar motivos de handoff del reporte y mejorar FAQ/mensajes.

@@ -180,3 +180,16 @@ CREATE INDEX evento_tipo ON evento(tipo, creado);
 ALTER TABLE contacto ADD COLUMN email TEXT;
 ALTER TABLE contacto ADD COLUMN email_hilo TEXT;
 CREATE UNIQUE INDEX contacto_email ON contacto(email) WHERE email IS NOT NULL;
+
+-- version: 8
+-- Fichas de clientes: datos que el equipo captura a mano y notas (historial: solo se agregan, nunca se editan).
+ALTER TABLE contacto ADD COLUMN fecha_nacimiento TEXT;   -- AAAA-MM-DD
+ALTER TABLE contacto ADD COLUMN como_nos_conocio TEXT;
+CREATE TABLE nota_cliente (
+  id INTEGER PRIMARY KEY,
+  contacto_id INTEGER NOT NULL REFERENCES contacto(id),
+  texto TEXT NOT NULL,
+  autor TEXT NOT NULL,
+  creado TEXT NOT NULL
+);
+CREATE INDEX nota_cliente_contacto ON nota_cliente(contacto_id, id);

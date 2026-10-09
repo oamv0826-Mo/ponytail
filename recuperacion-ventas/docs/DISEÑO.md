@@ -362,3 +362,19 @@ Maps (costo por consulta); no se construyó sin la decisión del dueño.
 | Requisitos y formulario de acceso | [prereqs](https://developers.google.com/my-business/content/prereqs) · [FAQ](https://developers.google.com/my-business/content/faq) |
 | Reseñas v4 y alcance `business.manage` | [accounts.locations.reviews](https://developers.google.com/my-business/reference/rest/v4/accounts.locations.reviews) |
 | Places API (New): campos y facturación por campo | [migración / field masks](https://developers.google.cn/maps/documentation/places/android-sdk/migrate-overview?hl=en) |
+
+## 8. Fichas, cotizaciones y cotejo
+
+`rv/clientes.py`; páginas dentro de la bandeja (misma sesión, mismo chequeo de Origin en cada POST, todo escapado).
+
+### 8.1 Fichas de clientes (esquema v8)
+
+- `/bandeja/clientes`: búsqueda por nombre, teléfono (también normalizado) o correo; los `%` y `_` del texto se
+  buscan literal. Más nuevos primero, máximo 100.
+- `/bandeja/clientes/nuevo`: alta a mano. Teléfono obligatorio (normalizado a E.164), correo opcional. Si el teléfono
+  o el correo ya existen se abre esa ficha (nunca se duplica). El alta queda con `origen='importado'`: lo registró
+  el negocio, no llegó escribiendo, así que no cuenta como "respuesta rápida" en la garantía.
+- `/bandeja/clientes/<id>`: datos editables (nombre, correo, cumpleaños, cómo nos conoció, consentimiento; el teléfono
+  es la llave y no se edita; el correo de un contacto de correo tampoco), citas futuras con el formulario de agendar
+  de siempre (`agenda.html_agendar`), citas pasadas, ventas (`ventas.html_ventas_conversacion`), cotizaciones y saldo,
+  y notas del equipo (`nota_cliente`: solo se agregan; la más reciente arriba). La conversación y la ficha se enlazan.
