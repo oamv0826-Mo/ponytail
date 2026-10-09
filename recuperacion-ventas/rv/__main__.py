@@ -9,7 +9,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import base, correo, motor, tick, ventas, verificar, wa, web
+from . import base, clientes, correo, motor, tick, ventas, verificar, wa, web
 
 
 def payload_falso(telefono, texto=None, nombre="", tipo="text", msg_id=None):
@@ -105,6 +105,16 @@ def cmd_importar_ventas(cfg, args):
     print(f"registradas={r['registradas']} duplicadas={r['duplicadas']} rechazadas={len(r['rechazadas'])}")
     for linea, motivo in r["rechazadas"]:
         print(f"  línea {linea}: {motivo}")
+
+
+def cmd_cotejo(cfg, args):
+    mes = args.mes or base.ahora().astimezone(cfg.tz).strftime("%Y-%m")
+    with base.db(cfg) as con:
+        try:
+            d = clientes.datos_cotejo(con, cfg, mes)
+        except ValueError as e:
+            sys.exit(str(e))
+    ventas.guardar_reporte(cfg, mes, clientes.cotejo_md(cfg, mes, d), "cotejo")
 
 
 def cmd_reporte(cfg, args):
@@ -209,6 +219,8 @@ def main(argv=None):
     r.add_argument("mes", nargs="?", help="AAAA-MM")
     r.add_argument("--resenas-google", type=int, help="reseñas nuevas en Google en el mes (dato manual)")
     r.add_argument("--enviar", action="store_true", help="mandarlo por correo a email.reporte_a (o email.avisos_a)")
+    cj = sub.add_parser("cotejo", help="cotización → cita → venta: lo que no cuadra en el mes (por omisión, el actual)")
+    cj.add_argument("mes", nargs="?", help="AAAA-MM")
     pg = sub.add_parser("pagina", help="página estática que lleva a WhatsApp")
     pg.add_argument("--salida")
     vf = sub.add_parser("verificar", help="chequeos de instalación y salud")
@@ -241,6 +253,7 @@ def main(argv=None):
      "usuario": lambda: cmd_usuario(cfg, args), "tick": lambda: cmd_tick(cfg, args),
      "importar-clientes": lambda: cmd_importar_clientes(cfg, args),
      "importar-ventas": lambda: cmd_importar_ventas(cfg, args), "reporte": lambda: cmd_reporte(cfg, args),
+     "cotejo": lambda: cmd_cotejo(cfg, args),
      "pagina": lambda: cmd_pagina(cfg, args), "verificar": lambda: cmd_verificar(cfg, args),
      "respaldo": lambda: cmd_respaldo(cfg, args), "prueba-real": lambda: cmd_prueba_real(cfg, args),
      "configurar-webhook": lambda: cmd_configurar_webhook(cfg, args)}[args.cmd]()

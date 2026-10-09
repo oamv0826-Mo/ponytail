@@ -208,3 +208,8 @@ Una línea por decisión, con su porqué. Las decisiones aprobadas en la convers
 - PDF: página HTML para imprimir desde el navegador (sin biblioteca de PDF).
 - Los formularios de la bandeja conservan los campos vacíos (`keep_blank_values`): sin eso, las filas de una cotización se desalineaban.
 - `Config` copia los valores por omisión: antes, modificar `cfg["email"]["smtp"]` en una instancia alteraba los valores por omisión de todo el proceso (encontrado por las pruebas de cotizaciones).
+- La venta se liga a una cotización dentro de `registrar_venta`, el único punto por el que entran todas las ventas (a mano, CSV, pagos en línea): una sola regla, sin copias por canal.
+- Ligado automático solo con una cotización aceptada con saldo y un monto que no lo rebasa; cualquier otro caso queda sin ligar y aparece en el cotejo (mejor revisar a mano que repartir mal un pago).
+- "Monto distinto al total" se reporta como "ventas ligadas que no cubren el total": con pagos parciales, una venta sola casi nunca iguala el total; lo que importa es si la suma lo cubre.
+- Una cita cuenta para la cotización si está ligada o si se creó después de aceptarla (agendar desde la ficha no obliga a ligarla); "asistió sin venta" acepta cualquier venta del cliente desde ese día, porque los pagos en línea no traen la cita.
+- El cotejo por omisión es del mes en curso (sirve para revisar durante el mes); el reporte mensual sigue siendo del mes anterior.

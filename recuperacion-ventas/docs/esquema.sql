@@ -219,3 +219,8 @@ CREATE TABLE cotizacion_linea (
   precio_centavos INTEGER NOT NULL CHECK (precio_centavos > 0)
 );
 CREATE INDEX cotizacion_linea_cot ON cotizacion_linea(cotizacion_id);
+
+-- version: 10
+-- Saldo: una venta puede quedar ligada a la cotización aceptada que paga (solo si no hay duda de cuál es).
+ALTER TABLE venta ADD COLUMN cotizacion_id INTEGER REFERENCES cotizacion(id);
+CREATE INDEX venta_cotizacion ON venta(cotizacion_id);

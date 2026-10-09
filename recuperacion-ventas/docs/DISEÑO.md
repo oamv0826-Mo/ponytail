@@ -394,3 +394,20 @@ Maps (costo por consulta); no se construyó sin la decisión del dueño.
   montos (total, precios y subtotales) solo para ese cliente. Si el cliente acepta o quiere cambiar una cotización,
   la IA usa `humano` con `cotizacion:<folio>`; `motor.motivo_cotizacion` solo acepta un folio abierto de ese cliente
   (o el único abierto) y nunca la marca aceptada: la confirma una persona.
+
+### 8.3 Saldo y cotejo (esquema v10)
+
+- `venta.cotizacion_id`. Toda venta pasa por `ventas.registrar_venta` (bandeja, CSV, Stripe, Mercado Pago) y ahí
+  `clientes.ligar_venta` la liga solo si el cliente tiene exactamente una cotización aceptada con saldo y el monto no
+  lo rebasa (anticipos y pagos parciales se ligan; dos abiertas o un monto mayor no: no se adivina).
+- Saldo de una cotización aceptada = total − ventas ligadas; la ficha muestra el saldo por cotización y el pendiente
+  total del cliente.
+- Cotejo del mes (`/bandeja/cotejo?mes=AAAA-MM` y `cotejo [AAAA-MM]` → `reportes/cotejo-AAAA-MM.md`; por omisión el mes
+  actual), cada fila con enlace a la ficha:
+  1. aceptadas sin cita (ni ligada ni creada después de aceptarla);
+  2. citas con «Asistió» sin venta (ni ligada a la cita ni del cliente desde ese día);
+  3. ventas sin ligar de clientes con una cotización abierta;
+  4. cotizaciones con ventas ligadas que no cubren el total (lo que la regla "monto distinto" detecta: como nunca
+     se liga más que el saldo, la diferencia siempre es un faltante);
+  5. enviadas sin respuesta que vencieron en el mes;
+  6. filas de `pagos-sin-contacto.csv` del mes.

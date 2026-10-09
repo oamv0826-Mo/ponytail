@@ -160,6 +160,8 @@ def registrar_venta(con, cfg, contacto_id, monto, fecha, por, cita_id=None):
     if cur.rowcount == 0:
         return None, ("esa venta ya estaba registrada (misma cita, fecha y monto)" if cita_id else
                       "esa venta ya estaba registrada (mismo contacto, fecha y monto)")
+    from . import clientes  # import diferido: clientes usa ventas
+    clientes.ligar_venta(con, cur.lastrowid, contacto_id, centavos)   # toda venta (a mano, CSV o pago) pasa por aquí
     return cur.lastrowid, None
 
 
@@ -274,10 +276,10 @@ def _duracion(seg):
     return f"{seg:.0f} s" if seg < 60 else f"{seg / 60:.1f} min" if seg < 3600 else f"{seg / 3600:.1f} h"
 
 
-def guardar_reporte(cfg, mes, texto):
+def guardar_reporte(cfg, mes, texto, nombre="reporte"):
     carpeta = cfg.carpeta / "reportes"
     carpeta.mkdir(exist_ok=True)
-    (carpeta / f"reporte-{mes}.md").write_text(texto, encoding="utf-8")
+    (carpeta / f"{nombre}-{mes}.md").write_text(texto, encoding="utf-8")
     print(texto)
 
 

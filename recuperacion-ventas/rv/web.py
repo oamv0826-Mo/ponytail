@@ -129,7 +129,8 @@ def pagina(cfg, titulo, cuerpo, usuario=None):
     cab = ""
     if usuario:
         cab = (f"<header><strong>{e(cfg['nombre'])}</strong><nav><a href='{bp}/bandeja'>Conversaciones</a>"
-               f"<a href='{bp}/bandeja/citas'>Citas</a><a href='{bp}/bandeja/clientes'>Clientes</a></nav><span>{e(usuario)}</span>"
+               f"<a href='{bp}/bandeja/citas'>Citas</a><a href='{bp}/bandeja/clientes'>Clientes</a>"
+               f"<a href='{bp}/bandeja/cotejo'>Cotejo</a></nav><span>{e(usuario)}</span>"
                f"<form class='inline' method='post' action='{bp}/bandeja/salir'><button>Salir</button></form></header>")
     return (f"<!doctype html><html lang='es'><head><meta charset='utf-8'><meta name='viewport' "
             f"content='width=device-width,initial-scale=1'><title>{e(titulo)}</title><style>{CSS}</style></head>"

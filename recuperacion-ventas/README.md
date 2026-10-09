@@ -40,6 +40,7 @@ origen se rechazan.
 | `importar-clientes clientes.csv` | base para reactivación (`nombre,telefono,ultima_visita,consentimiento`) |
 | `importar-ventas ventas.csv` | ventas (`telefono,fecha,monto`) |
 | `reporte [AAAA-MM] [--resenas-google N] [--enviar]` | reporte mensual con garantía; `--enviar` lo manda por correo |
+| `cotejo [AAAA-MM]` | cotización → cita → venta: lo que no cuadra en el mes (también en `/bandeja/cotejo`) |
 | `pagina [--salida archivo]` | página estática con botón a WhatsApp |
 | `verificar [--remoto]` | chequeos de instalación y salud |
 | `respaldo` | copia comprimida de la base |

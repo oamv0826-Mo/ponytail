@@ -237,3 +237,84 @@ class ConfigAislada(Caso):
         self.cfg["cotizaciones"]["vigencia_dias"] = 3
         otra = base.cargar_config(self.dir)
         self.assertEqual((otra["email"]["smtp"]["host"], otra["cotizaciones"]["vigencia_dias"]), ("", 15))
+
+
+class SaldoYCotejo(ConBandeja):
+    def setUp(self):
+        super().setUp()
+        from rv import clientes
+        self.cl = clientes
+        self.cid = int(self.post("/bandeja/clientes/nuevo", {"nombre": "Marta", "telefono": "8100000033"}).rsplit("/", 1)[1])
+
+    def cotizacion(self, total="1000", estado="aceptada", cid=None):
+        qid, error = self.cl.guardar_cotizacion(self.con, self.cfg, {"id": cid or self.cid}, "ana", {
+            "servicio": [""], "descripcion": ["Tratamiento"], "cantidad": ["1"], "precio": [total]})
+        self.assertIsNone(error)
+        self.con.execute("UPDATE cotizacion SET estado=?, enviada_en=?, respondida_en=? WHERE id=?",
+                         (estado, base.iso(self.t), base.iso(self.t), qid))
+        return self.cl.cotizacion(self.con, qid)
+
+    def venta(self, monto, cid=None, fecha="2026-10-06"):
+        from rv import ventas
+        vid, error = ventas.registrar_venta(self.con, self.cfg, cid or self.cid, monto, fecha, "humano:ana")
+        self.assertIsNone(error)
+        return self.con.execute("SELECT * FROM venta WHERE id=?", (vid,)).fetchone()
+
+    def cotejo(self, k):
+        return [detalle for _, _, detalle in self.cl.datos_cotejo(self.con, self.cfg, "2026-10")[k]]
+
+    def test_una_cotizacion_abierta_se_liga_dos_no(self):
+        q = self.cotizacion("1000")
+        self.assertEqual(self.venta("400")["cotizacion_id"], q["id"])          # anticipo
+        self.assertEqual(self.cl.saldo(self.con, q), 60000)
+        self.assertIsNone(self.venta("700")["cotizacion_id"])                  # rebasa el saldo: no se adivina
+        self.assertEqual(self.venta("600", fecha="2026-10-05")["cotizacion_id"], q["id"])
+        self.assertEqual(self.cl.saldo(self.con, q), 0)
+        self.assertIn("Saldo pendiente del cliente: <strong>$0.00 MXN</strong>", self.get(f"/bandeja/clientes/{self.cid}"))
+        self.cotizacion("500")
+        self.cotizacion("800")
+        self.assertIsNone(self.venta("300", fecha="2026-10-04")["cotizacion_id"])   # dos abiertas: no se liga
+        self.assertEqual(len(self.cotejo("venta_sin_ligar")), 2)   # la de 700 y la de 300, con cotizaciones abiertas
+
+    def test_cada_categoria_del_cotejo(self):
+        q = self.cotizacion("1000")
+        self.assertEqual(self.cotejo("aceptada_sin_cita"), [f"{q['folio']} por $1,000.00 MXN"])
+        self.venta("400")
+        self.assertEqual(self.cotejo("saldo_pendiente"), [f"{q['folio']}: total $1,000.00 MXN, falta $600.00 MXN"])
+        inicio = local(2026, 10, 2, 11, 0)
+        self.con.execute("INSERT INTO cita (contacto_id, servicio_id, inicio, fin, estado, creado, creado_por) VALUES "
+                         "(?, 'limpieza', ?, ?, 'asistio', ?, 'bot')",
+                         (self.cid, base.iso(inicio), base.iso(inicio + dt.timedelta(hours=1)), base.iso(self.t)))
+        self.assertEqual(self.cotejo("aceptada_sin_cita"), [])   # ya hay una cita creada después de aceptarla
+        otro = int(self.post("/bandeja/clientes/nuevo", {"nombre": "Pepe", "telefono": "8100000044"}).rsplit("/", 1)[1])
+        self.con.execute("INSERT INTO cita (contacto_id, servicio_id, inicio, fin, estado, creado, creado_por) VALUES "
+                         "(?, 'limpieza', ?, ?, 'asistio', ?, 'bot')",
+                         (otro, base.iso(inicio), base.iso(inicio + dt.timedelta(hours=1)), base.iso(self.t)))
+        self.assertEqual(self.cotejo("asistio_sin_venta"), ["Limpieza dental el 2026-10-02"])   # Marta sí pagó después
+        v = self.cotizacion("200", estado="vencida", cid=otro)
+        self.assertEqual(self.cotejo("vencida"), [f"{v['folio']} venció el 2026-10-21"])
+        (self.dir / "pagos-sin-contacto.csv").write_text(
+            "telefono,fecha,monto,email,nombre,proveedor,pago\n+525500000000,2026-10-03,250.00,x@y.mx,Desconocido,stripe,cs_9\n"
+            "+525500000000,2026-09-03,99.00,x@y.mx,Viejo,stripe,cs_8\n", encoding="utf-8")
+        self.assertEqual(self.cotejo("pago_sin_cliente"), ["$250.00 el 2026-10-03 · stripe cs_9 · tel +525500000000"])
+        pagina = self.get("/bandeja/cotejo?mes=2026-10")
+        self.assertIn(f"/bandeja/clientes/{otro}'>Pepe</a>", pagina)
+        self.assertIn("mes inválido", self.get("/bandeja/cotejo?mes=octubre"))
+
+    def test_de_punta_a_punta_saldo_cero_y_cotejo_limpio(self):
+        from rv.__main__ import main
+        form = {"servicio": ["limpieza", ""], "descripcion": ["", "Radiografía"], "cantidad": ["1", "1"],
+                "precio": ["", "350"]}
+        qid = int(self.post(f"/bandeja/clientes/{self.cid}/cotizacion", form).rsplit("/", 1)[1])
+        self.post(f"/bandeja/cotizaciones/{qid}/enviar", {})   # sin ventana ni correo: plantilla 'cotizacion'
+        self.assertEqual(self.con.execute("SELECT plantilla FROM mensaje ORDER BY id DESC").fetchone()[0], "cotizacion")
+        self.post(f"/bandeja/cotizaciones/{qid}/aceptar", {})
+        self.post(f"/bandeja/c/{self.cid}/agendar", {"servicio": "limpieza", "fecha": "2026-10-08", "hora": "11:00"})
+        self.assertIsNotNone(self.con.execute("SELECT 1 FROM cita WHERE contacto_id=?", (self.cid,)).fetchone())
+        self.post(f"/bandeja/c/{self.cid}/venta", {"monto": "1150", "fecha": "2026-10-06"})
+        q = self.cl.cotizacion(self.con, qid)
+        self.assertEqual((q["estado"], self.cl.saldo(self.con, q)), ("aceptada", 0))
+        d = self.cl.datos_cotejo(self.con, self.cfg, "2026-10")
+        self.assertEqual([x for filas in d.values() for x in filas if x[0] == self.cid], [])
+        main(["--cliente", str(self.dir), "cotejo", "2026-10"])
+        self.assertIn("Sin diferencias.", (self.dir / "reportes" / "cotejo-2026-10.md").read_text())

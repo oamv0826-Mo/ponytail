@@ -334,16 +334,118 @@ def html_cotizaciones(con, cfg, c):
               f"</form></details>")
 
 
+# ---------- saldo ----------
+
+def saldo(con, q):
+    """Lo que falta pagar de una cotización aceptada: total − ventas ligadas (centavos)."""
+    pagado = con.execute("SELECT COALESCE(SUM(monto_centavos),0) FROM venta WHERE cotizacion_id=?", (q["id"],)).fetchone()[0]
+    return q["total_centavos"] - pagado
+
+
+def con_saldo(con, cid):
+    return [q for q in con.execute("SELECT * FROM cotizacion WHERE contacto_id=? AND estado='aceptada' ORDER BY id",
+                                   (cid,)).fetchall() if saldo(con, q) > 0]
+
+
+def ligar_venta(con, venta_id, cid, centavos):
+    """Liga la venta a la cotización que paga solo si no hay duda: el cliente tiene exactamente una aceptada con
+    saldo y el monto no la rebasa. Si no, queda sin ligar y el cotejo la muestra."""
+    pendientes = con_saldo(con, cid)
+    if len(pendientes) == 1 and centavos <= saldo(con, pendientes[0]):
+        con.execute("UPDATE venta SET cotizacion_id=? WHERE id=?", (pendientes[0]["id"], venta_id))
+        return pendientes[0]["id"]
+    return None
+
+
 def html_saldo_cab():
-    return ""
+    return "<th>Saldo</th>"
 
 
 def html_saldo_fila(con, q):
-    return ""
+    return f"<td>{ventas._pesos(saldo(con, q)) if q['estado'] == 'aceptada' else '—'}</td>"
 
 
 def html_saldo_cliente(con, c):
-    return ""
+    total = sum(saldo(con, q) for q in con_saldo(con, c["id"]))
+    return f"<p>Saldo pendiente del cliente: <strong>{ventas._pesos(total)}</strong></p>"
+
+
+# ---------- cotejo: cotización → cita → venta/pago ----------
+
+CATEGORIAS_COTEJO = {
+    "aceptada_sin_cita": "Cotizaciones aceptadas sin cita",
+    "asistio_sin_venta": "Citas con «Asistió» sin venta",
+    "venta_sin_ligar": "Ventas sin ligar de clientes con cotización abierta",
+    "saldo_pendiente": "Ventas ligadas que no cubren el total de la cotización",
+    "vencida": "Cotizaciones enviadas sin respuesta que vencieron",
+    "pago_sin_cliente": "Pagos en línea sin cliente (pagos-sin-contacto.csv)",
+}
+
+
+def datos_cotejo(con, cfg, mes):
+    """{categoría: [(contacto_id | None, nombre, detalle)]} del mes AAAA-MM (hora local)."""
+    a, b = ventas._rango_mes(cfg, mes)
+    A, B, da, db = base.iso(a), base.iso(b), a.date().isoformat(), b.date().isoformat()
+    r = {k: [] for k in CATEGORIAS_COTEJO}
+    nombre = lambda f: f["nombre"] or f["telefono"]   # noqa: E731
+    for q in con.execute("SELECT q.*, c.nombre, c.telefono FROM cotizacion q JOIN contacto c ON c.id=q.contacto_id "
+                         "WHERE q.estado='aceptada' AND q.respondida_en>=? AND q.respondida_en<? AND q.cita_id IS NULL "
+                         "AND NOT EXISTS (SELECT 1 FROM cita ci WHERE ci.contacto_id=q.contacto_id AND "
+                         "ci.estado<>'cancelada' AND ci.creado>=q.respondida_en) ORDER BY q.id", (A, B)):
+        r["aceptada_sin_cita"].append((q["contacto_id"], nombre(q), f"{q['folio']} por {ventas._pesos(q['total_centavos'])}"))
+    for ci in con.execute("SELECT ci.*, c.nombre, c.telefono FROM cita ci JOIN contacto c ON c.id=ci.contacto_id "
+                          "WHERE ci.estado='asistio' AND ci.inicio>=? AND ci.inicio<? ORDER BY ci.inicio", (A, B)):
+        dia = base.de_iso(ci["inicio"]).astimezone(cfg.tz).date().isoformat()
+        if not con.execute("SELECT 1 FROM venta WHERE cita_id=? OR (contacto_id=? AND fecha>=?)",
+                           (ci["id"], ci["contacto_id"], dia)).fetchone():
+            r["asistio_sin_venta"].append((ci["contacto_id"], nombre(ci), f"{cfg.nombre_servicio(ci['servicio_id'])} el {dia}"))
+    for v in con.execute("SELECT v.*, c.nombre, c.telefono FROM venta v JOIN contacto c ON c.id=v.contacto_id "
+                         "WHERE v.fecha>=? AND v.fecha<? AND v.cotizacion_id IS NULL ORDER BY v.fecha", (da, db)):
+        abiertas_ = con_saldo(con, v["contacto_id"])
+        if abiertas_:
+            r["venta_sin_ligar"].append((v["contacto_id"], nombre(v), f"{ventas._pesos(v['monto_centavos'])} el {v['fecha']}; "
+                                         f"abiertas: {', '.join(q['folio'] for q in abiertas_)}"))
+    for q in con.execute("SELECT q.*, c.nombre, c.telefono FROM cotizacion q JOIN contacto c ON c.id=q.contacto_id "
+                         "WHERE q.estado='aceptada' AND EXISTS (SELECT 1 FROM venta v WHERE v.cotizacion_id=q.id "
+                         "AND v.fecha>=? AND v.fecha<?) ORDER BY q.id", (da, db)):
+        if saldo(con, q):
+            r["saldo_pendiente"].append((q["contacto_id"], nombre(q), f"{q['folio']}: total {ventas._pesos(q['total_centavos'])}"
+                                         f", falta {ventas._pesos(saldo(con, q))}"))
+    for q in con.execute("SELECT q.*, c.nombre, c.telefono FROM cotizacion q JOIN contacto c ON c.id=q.contacto_id "
+                         "WHERE q.estado='vencida' ORDER BY q.id"):
+        hasta = vigente_hasta(cfg, q)
+        if da <= hasta.isoformat() < db:
+            r["vencida"].append((q["contacto_id"], nombre(q), f"{q['folio']} venció el {hasta.isoformat()}"))
+    ruta = cfg.carpeta / "pagos-sin-contacto.csv"
+    if ruta.exists():
+        for fila in ventas.leer_csv(ruta):
+            if da <= (fila.get("fecha") or "") < db:
+                r["pago_sin_cliente"].append((None, fila.get("nombre") or fila.get("email") or fila.get("telefono") or "?",
+                                              f"${fila.get('monto')} el {fila.get('fecha')} · {fila.get('proveedor')} "
+                                              f"{fila.get('pago')} · tel {fila.get('telefono') or '—'}"))
+    return r
+
+
+def cotejo_md(cfg, mes, d):
+    partes = [f"# Cotejo {mes} · {cfg['nombre']}", ""]
+    for k, titulo in CATEGORIAS_COTEJO.items():
+        partes.append(f"## {titulo} ({len(d[k])})")
+        partes += [f"- {nombre}: {detalle}" for _, nombre, detalle in d[k]] or ["- Sin diferencias."]
+        partes.append("")
+    return "\n".join(partes)
+
+
+def html_cotejo(con, cfg, mes):
+    bp = e(cfg.base_path)
+    d = datos_cotejo(con, cfg, mes)
+    enlace = lambda cid, nombre: f"<a href='{bp}/bandeja/clientes/{cid}'>{e(nombre)}</a>" if cid else e(nombre)  # noqa: E731
+    secciones = "".join(
+        f"<h2>{titulo} ({len(d[k])})</h2>" + ("<ul>" + "".join(f"<li>{enlace(cid, nombre)}: {e(detalle)}</li>"
+                                                              for cid, nombre, detalle in d[k]) + "</ul>"
+                                              if d[k] else "<p>Sin diferencias.</p>")
+        for k, titulo in CATEGORIAS_COTEJO.items())
+    return (f"<h1>Cotejo</h1><form method='get' action='{bp}/bandeja/cotejo'><label>Mes <input type='month' name='mes' "
+            f"value='{e(mes)}'></label> <button>Ver</button></form>{secciones}")
 
 
 def html_cotizacion(con, cfg, q, error=""):
@@ -408,6 +510,12 @@ def get(con, cfg, usuario, ruta, q):
     if m:
         c = motor.contacto(con, int(m.group(1)))
         return (c["nombre"] or c["telefono"], html_ficha(con, cfg, c, usuario, error)) if c else ("No existe", "<p>No existe.</p>")
+    if ruta == "/bandeja/cotejo":
+        mes = (q.get("mes") or [""])[0] or base.ahora().astimezone(cfg.tz).strftime("%Y-%m")
+        try:
+            return "Cotejo", html_cotejo(con, cfg, mes)
+        except ValueError as ex:
+            return "Cotejo", f"<p class=err>{e(str(ex))}</p>"
     m = re.fullmatch(r"/bandeja/cotizaciones/(\d+)(/imprimir)?", ruta)
     if m:
         cot = cotizacion(con, int(m.group(1)))
