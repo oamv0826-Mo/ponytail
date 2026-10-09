@@ -24,7 +24,8 @@ def _plantilla(con, cfg, c, nombre, params):
     ponytail: si Meta aceptó el envío pero la respuesta se perdió (timeout), el reintento puede duplicarlo;
     es preferible a no enviar un recordatorio."""
     if base.es_correo(c):   # mismo texto que la plantilla, en el hilo del cliente
-        ok = motor.responder(con, cfg, motor.contacto(con, c["id"]), wa.texto_plantilla(nombre, params), autor="sistema")[1]
+        mid, ok = motor.responder(con, cfg, motor.contacto(con, c["id"]), wa.texto_plantilla(nombre, params), autor="sistema")
+        con.execute("UPDATE mensaje SET plantilla=? WHERE id=?", (nombre, mid))   # para contar sus fallas abajo
     else:
         ok = wa.enviar(con, cfg, c["telefono"], plantilla=nombre, params=params, contacto_id=c["id"], autor="sistema")[1]
     if ok:

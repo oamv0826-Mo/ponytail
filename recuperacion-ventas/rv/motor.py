@@ -41,8 +41,11 @@ def contacto(con, cid):
 
 
 def responder(con, cfg, c, texto, autor="bot"):
-    """Contesta por el canal del contacto: WhatsApp o, si escribió por correo, en su mismo hilo de correo."""
-    if not base.es_correo(c):
+    """Contesta por el canal por el que escribió al último: WhatsApp o su mismo hilo de correo (un contacto de WhatsApp
+    con correo en su ficha también puede escribir por correo, y ahí la ventana de WhatsApp puede estar cerrada)."""
+    ultimo = con.execute("SELECT wa_id FROM mensaje WHERE contacto_id=? AND direccion='in' ORDER BY id DESC LIMIT 1",
+                         (c["id"],)).fetchone()
+    if not base.es_correo(c) and not (ultimo and (ultimo["wa_id"] or "").startswith("correo:")):
         return wa.enviar(con, cfg, c["telefono"], texto=texto, contacto_id=c["id"], autor=autor)
     mid = con.execute("INSERT INTO mensaje (contacto_id, telefono, direccion, tipo, texto, autor, estado, creado) "
                       "VALUES (?,?,?,?,?,?,?,?)", (c["id"], c["telefono"], "out", "texto", texto, autor, "pendiente",

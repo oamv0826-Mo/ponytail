@@ -1,5 +1,6 @@
 """Integraciones externas (correo, Microsoft 365, pagos): siempre con respuestas falsas, nunca contra servicios reales."""
 import base64
+import datetime as dt
 import json
 import os
 from unittest import mock
@@ -243,6 +244,24 @@ class CanalCorreo(ConCorreo):
         self.assertIn("\tRe: Precio | ", salida[0])
         respuesta = self.con.execute("SELECT * FROM mensaje WHERE direccion='out' AND contacto_id=?", (c["id"],)).fetchone()
         self.assertEqual(respuesta["estado"], "prueba")
+
+    def test_cliente_de_whatsapp_que_escribe_por_correo_recibe_la_respuesta_por_correo(self):
+        # la ficha le guardó su correo; escribe por correo días después (ventana de WhatsApp cerrada)
+        self.con.execute("INSERT INTO contacto (telefono, wa_id, nombre, email, ultimo_entrante, creado) VALUES "
+                         "('+528100000001', '528100000001', 'Ana', 'ana@gmail.com', ?, ?)",
+                         (base.iso(self.t - dt.timedelta(days=3)), base.iso(self.t)))
+        self.leer([CORREO_CLIENTE])
+        self.assertEqual(len([x for x in self.log().splitlines() if "correo:ana@gmail.com" in x]), 1)
+        self.assertNotIn("+528100000001", self.log())
+
+    def test_recordatorio_por_correo_que_falla_se_deja_de_intentar(self):
+        from rv import tick
+        self.leer([CORREO_CLIENTE])
+        c = self.con.execute("SELECT * FROM contacto WHERE email='ana@gmail.com'").fetchone()
+        with mock.patch.object(correo, "enviar", return_value=(None, "SMTP caído")):
+            r = [tick._plantilla(self.con, self.cfg, c, "recordatorio_cita", ["Ana", "Limpieza", "mañana", "aquí"])
+                 for _ in range(3)]
+        self.assertEqual(r, ["reintentar", "reintentar", "agotado"])   # como en WhatsApp: 3 fallas en 24 h
 
     def test_el_mismo_correo_dos_veces_se_contesta_una(self):
         self.leer([CORREO_CLIENTE])
