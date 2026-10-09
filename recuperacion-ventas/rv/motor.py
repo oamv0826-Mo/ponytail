@@ -224,12 +224,14 @@ def guardar_correo(con, cfg, item, reintento=False):
     hilo = json.dumps({"id": item["id"], "asunto": item["asunto"], "graph_id": item.get("graph_id")})
     con.execute("UPDATE contacto SET email_hilo=? WHERE id=?", (hilo, c["id"]))
     texto = item["texto"] or item["asunto"]   # un correo con solo asunto ("¿precio de limpieza?") también es consulta
+    # sin verificar no cuenta como canal de respuesta (ver responder): pudo mandarlo quien suplanta la dirección
+    clave = f"{'correo' if item.get('verificado') else 'correo-nv'}:{item['id']}"
     cur = con.execute("INSERT OR IGNORE INTO mensaje (contacto_id, telefono, direccion, tipo, texto, autor, wa_id, "
                       "estado, creado) VALUES (?,?,?,?,?,?,?,?,?)",
-                      (c["id"], c["telefono"], "in", "texto", texto, "cliente", f"correo:{item['id']}", "recibido",
+                      (c["id"], c["telefono"], "in", "texto", texto, "cliente", clave, "recibido",
                        base.iso(ts)))
     if cur.rowcount == 0:   # el mismo Message-ID: duplicado, salvo que una caída lo haya dejado sin respuesta
-        previo = con.execute("SELECT id FROM mensaje WHERE wa_id=?", (f"correo:{item['id']}",)).fetchone()
+        previo = con.execute("SELECT id FROM mensaje WHERE wa_id=?", (clave,)).fetchone()
         if not reintento or con.execute("SELECT 1 FROM mensaje WHERE contacto_id=? AND direccion='out' AND id>?",
                                         (c["id"], previo["id"])).fetchone():
             return None
@@ -355,7 +357,7 @@ def procesar_pendientes(con, cfg, limite=100):
     terminada al final; si el proceso muere a la mitad, otra corrida la retoma pasado RECLAMO_VENCIDO."""
     hechos = 0
     vencido = base.iso(base.ahora() - RECLAMO_VENCIDO)
-    filas = con.execute("SELECT id, payload, procesado FROM entrada WHERE terminado IS NULL AND "
+    filas = con.execute("SELECT id, payload, procesado, recibido FROM entrada WHERE terminado IS NULL AND "
                         "(procesado IS NULL OR procesado<?) ORDER BY id LIMIT ?", (vencido, limite)).fetchall()
     for f in filas:
         if con.execute("UPDATE entrada SET procesado=? WHERE id=? AND terminado IS NULL AND "
@@ -366,6 +368,10 @@ def procesar_pendientes(con, cfg, limite=100):
         except Exception as e:  # una entrada rota no detiene la cola; queda registrada
             base.log("error procesando entrada", f["id"], repr(e))
             con.execute("UPDATE entrada SET error=? WHERE id=?", (repr(e)[:500], f["id"]))
+            # un pago ya confirmado al proveedor no lo vuelve a mandar nadie: se reintenta (pasado RECLAMO_VENCIDO)
+            # durante un día por si fue la red; un mensaje no, porque reintentarlo podría contestar dos veces
+            if f["payload"].startswith('{"tipo": "pago"') and base.de_iso(f["recibido"]) > base.ahora() - dt.timedelta(days=1):
+                continue
         con.execute("UPDATE entrada SET terminado=? WHERE id=?", (base.iso(base.ahora()), f["id"]))
         hechos += 1
     return hechos

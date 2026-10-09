@@ -254,6 +254,15 @@ class CanalCorreo(ConCorreo):
         self.assertEqual(len([x for x in self.log().splitlines() if "correo:ana@gmail.com" in x]), 1)
         self.assertNotIn("+528100000001", self.log())
 
+    def test_correo_sin_verificar_no_cambia_el_canal_de_un_cliente_de_whatsapp(self):
+        # alguien que suplanta su dirección no hace que las respuestas de la bandeja se vayan por correo
+        self.con.execute("INSERT INTO contacto (telefono, wa_id, nombre, email, ultimo_entrante, creado) VALUES "
+                         "('+528100000001', '528100000001', 'Ana', 'ana@gmail.com', ?, ?)", (base.iso(self.t), base.iso(self.t)))
+        self.leer([CORREO_CLIENTE.split(b"\r\n", 1)[1]])   # sin Authentication-Results
+        motor.responder(self.con, self.cfg, self.contacto(), "Hola Ana, soy Laura")
+        self.assertIn("+528100000001\t", self.log())
+        self.assertNotIn("correo:ana@gmail.com", self.log())
+
     def test_recordatorio_por_correo_que_falla_se_deja_de_intentar(self):
         from rv import tick
         self.leer([CORREO_CLIENTE])
@@ -443,6 +452,28 @@ class Pagos(Caso):
         r = ventas.importar_ventas(self.con, self.cfg, self.dir / "pagos-sin-contacto.csv")
         self.assertEqual(r["registradas"], 0)   # el teléfono no es cliente: nada se registra hasta corregirlo
         self.assertEqual(pagos._celda("=HYPERLINK(1)"), "'=HYPERLINK(1)")
+
+    def test_pago_que_falla_por_la_red_se_reintenta(self):
+        # Mercado Pago ya recibió nuestro 200: si la consulta del pago falla, nadie más lo vuelve a mandar
+        from rv import pagos
+        firma = f"ts=1,v1={pagos._hmac('mp_secreto', b'id:777;request-id:r1;ts:1;')}"
+        pagos.recibir(self.con, self.cfg, "mercadopago", b"{}", {"x-signature": firma, "x-request-id": "r1"},
+                      {"data.id": ["777"], "type": ["payment"]})
+        pago = {"id": 777, "status": "approved", "transaction_amount": 980.0, "currency_id": "MXN",
+                "date_approved": "2026-10-06T09:30:00.000-06:00", "payer": {"phone": {"area_code": "81", "number": "00000001"}}}
+        with mock.patch.object(pagos, "pago_mercadopago", side_effect=[RuntimeError("red: timeout"), pago]):
+            motor.procesar_pendientes(self.con, self.cfg)
+            self.assertEqual(self.venta(), [])
+            self.t += dt.timedelta(minutes=3)
+            motor.procesar_pendientes(self.con, self.cfg)
+        self.assertEqual([v["monto_centavos"] for v in self.venta()], [98000])
+        firma = f"ts=1,v1={pagos._hmac('mp_secreto', b'id:778;request-id:r2;ts:1;')}"
+        pagos.recibir(self.con, self.cfg, "mercadopago", b"{}", {"x-signature": firma, "x-request-id": "r2"},
+                      {"data.id": ["778"], "type": ["payment"]})
+        self.t += dt.timedelta(days=1)   # uno que sigue fallando un día después se deja de intentar (queda con su error)
+        with mock.patch.object(pagos, "pago_mercadopago", side_effect=RuntimeError("Mercado Pago 404")):
+            motor.procesar_pendientes(self.con, self.cfg)
+        self.assertEqual(self.con.execute("SELECT COUNT(*) FROM entrada WHERE terminado IS NULL").fetchone()[0], 0)
 
     def test_mercado_pago_consulta_el_pago_y_busca_por_correo(self):
         from rv import pagos

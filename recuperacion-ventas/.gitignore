@@ -5,3 +5,4 @@ __pycache__/
 respaldos/
 envios-prueba.log
 secretos.env
+*.migrar.lock
