@@ -166,8 +166,12 @@ class Cotizaciones(ConBandeja):
         q = self.q()
         self.assertEqual((q["estado"], q["respondida_en"]), ("aceptada", base.iso(self.t)))
         self.assertIn("Solo una cotización enviada", self.post(f"/bandeja/cotizaciones/{qid}/rechazar", {}))
+        self.t = self.t + dt.timedelta(days=3)
+        _, h, _ = self.pedir("POST", "/bandeja/login", {"usuario": "ana", "clave": "clave-segura-123"})
+        self.cookie = h["Set-Cookie"].split(";")[0]   # la sesión dura 12 h
         impresa = self.get(f"/bandeja/cotizaciones/{qid}/imprimir")
         self.assertIn("Cotización C-0001", impresa)
+        self.assertIn("Fecha: 2026-10-06", impresa)   # la del envío, aunque se imprima días después
         self.assertNotIn("<header>", impresa)   # página limpia para imprimir
         self.assertIn("C-0001", self.get(f"/bandeja/clientes/{self.cid}"))
 

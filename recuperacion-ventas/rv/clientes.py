@@ -484,12 +484,13 @@ def html_imprimir(con, cfg, q):
     filas = "".join(f"<tr><td>{l['cantidad']}</td><td>{e(l['descripcion'])}</td><td class=n>{ventas._pesos(l['precio_centavos'])}"
                     f"</td><td class=n>{ventas._pesos(l['cantidad'] * l['precio_centavos'])}</td></tr>" for l in lineas(con, q["id"]))
     hoy = base.ahora().astimezone(cfg.tz).date()
+    fecha = base.de_iso(q["enviada_en"] or q["creado"]).astimezone(cfg.tz).date()   # la de la cotización, no la de hoy
     return (f"<!doctype html><html lang='es'><head><meta charset='utf-8'><title>Cotización {e(q['folio'])}</title>"
             "<style>body{font:14px/1.5 system-ui,sans-serif;max-width:720px;margin:32px auto;color:#111}"
             "table{width:100%;border-collapse:collapse}td,th{padding:6px;border-bottom:1px solid #ccc;text-align:left}"
             ".n{text-align:right}@media print{a{display:none}}</style></head><body>"
             f"<h1>{e(cfg['nombre'])}</h1><p>{e(cfg.get('direccion', ''))}</p>"
-            f"<h2>Cotización {e(q['folio'])}</h2><p>Para: {e(c['nombre'] or c['telefono'])} · Fecha: {hoy.isoformat()}"
+            f"<h2>Cotización {e(q['folio'])}</h2><p>Para: {e(c['nombre'] or c['telefono'])} · Fecha: {fecha.isoformat()}"
             f" · Vigente hasta: {e(str(vigente_hasta(cfg, q) or hoy + dt.timedelta(days=q['vigencia_dias'])))}</p>"
             f"<table><tr><th>Cant.</th><th>Descripción</th><th class=n>Precio</th><th class=n>Importe</th></tr>{filas}"
             f"<tr><th colspan='3'>Total (MXN)</th><th class=n>{ventas._pesos(q['total_centavos'])}</th></tr></table>"
