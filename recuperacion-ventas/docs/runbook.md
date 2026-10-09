@@ -9,6 +9,8 @@ Todas las órdenes: `cd /srv/rv/app/recuperacion-ventas && python3 -m rv --clien
 - `systemctl list-timers 'rv-*'`: el tick debe correr cada 5 min y el respaldo cada noche.
 
 ## Primer servidor (una vez)
+Atajo: `deploy/instalar.sh servidor --dominio rv.tudominio.mx` hace los pasos 1 a 5 y `deploy/instalar.sh cliente <id>` arma la carpeta, los secretos, la ruta de Caddy y los servicios de un cliente (en modo prueba). El detalle manual sigue abajo.
+
 1. Ubuntu LTS; `apt install python3 tzdata caddy rclone git`.
 2. `adduser --system --group --home /home/rv rv`; `mkdir -p /srv/rv/clientes /etc/rv`; `chown -R rv:rv /srv/rv`.
 3. `git clone <repo> /srv/rv/app` (como `rv`).
