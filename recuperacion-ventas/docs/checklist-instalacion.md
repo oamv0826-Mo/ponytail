@@ -25,7 +25,7 @@ Paso a paso de cada cuenta, con costo y tiempo: [arranque-cuentas.md](arranque-c
 - [ ] Perfil de Google: horario, fotos, teléfono/WhatsApp y enlace a la página (`pagina`). Es manual, no lo hace el sistema.
 - [ ] **[dueño]** Calendario: crear un calendario de Google para las citas y compartirlo con el correo de la cuenta de servicio con permiso "Hacer cambios en eventos" → `agenda.calendar_id`. Si el negocio usa Outlook: buzón de citas en Microsoft 365 y `agenda.proveedor: "microsoft"` ([arranque-cuentas.md §10](arranque-cuentas.md)).
 - [ ] **[dueño]** Correo para avisos y reporte (opcional): Gmail con contraseña de aplicación o app de Microsoft 365 con `Mail.Send` ([arranque-cuentas.md §9](arranque-cuentas.md)) → bloque `email`. Si el negocio recibe consultas por correo: buzón exclusivo para clientes y `email.entrada.activa: true`.
-- [ ] **[dueño]** Si cobra en línea: webhook de Stripe (`checkout.session.completed`, links con teléfono) o de Mercado Pago (Pagos) → bloque `pagos` ([arranque-cuentas.md §11](arranque-cuentas.md)). Clip: exportar e `importar-ventas`.
+- [ ] **[dueño]** Si cobra en línea: webhook de Stripe (`checkout.session.completed` y `checkout.session.async_payment_succeeded`, links con teléfono) o de Mercado Pago (Pagos) → bloque `pagos` ([arranque-cuentas.md §11](arranque-cuentas.md)). Clip: exportar e `importar-ventas`.
 - [ ] **[dueño]** Base de clientes antiguos en CSV (`nombre,telefono,ultima_visita,consentimiento`), solo marcando "sí" a quien aceptó recibir mensajes.
 
 ## Semana 2: instalación técnica

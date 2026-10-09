@@ -306,7 +306,8 @@ registra la venta con la misma atribución que una venta capturada a mano. Si no
 **Stripe** (links de pago o Checkout):
 1. En los links de pago, activa **Recopilar el número de teléfono** del cliente: es lo que permite encontrarlo.
 2. **Desarrolladores → Webhooks → Agregar destino**: URL `https://<url_publica>/pagos/stripe`, evento
-   **`checkout.session.completed`** (solo ese: si agregas también `charge.succeeded`, el mismo cobro llega dos veces).
+   **`checkout.session.completed`** y **`checkout.session.async_payment_succeeded`** (este último es el aviso de que se
+   pagó en OXXO o por transferencia). No agregues `charge.succeeded`: el mismo cobro llegaría dos veces.
 3. Copia el **secreto de firma** (`whsec_...`) → `secretos.env` como `STRIPE_WEBHOOK_SECRET=...`.
 4. Prueba: "Enviar evento de prueba" desde el panel; en el log de Agorá debe verse procesado.
 

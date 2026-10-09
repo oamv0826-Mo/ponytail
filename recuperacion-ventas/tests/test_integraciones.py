@@ -391,6 +391,20 @@ class Pagos(Caso):
         self.cfg["pagos"]["stripe"]["activo"] = False
         self.assertEqual(pagos.recibir(self.con, self.cfg, "stripe", cuerpo, {"Stripe-Signature": firma}, {})[0], 404)
 
+    def test_oxxo_se_registra_cuando_stripe_avisa_que_ya_se_pago(self):
+        # OXXO y transferencias: checkout.session.completed llega sin pagar y el pago llega después en
+        # checkout.session.async_payment_succeeded (docs.stripe.com/checkout/fulfillment)
+        from rv import pagos
+        for tipo, estado in (("checkout.session.completed", "unpaid"), ("checkout.session.async_payment_succeeded", "paid")):
+            evento = json.loads(self.stripe(estado=estado, tipo=tipo)[0])
+            evento["id"] = f"evt_{tipo}"
+            cuerpo = json.dumps(evento).encode()
+            t = str(int(self.t.timestamp()))
+            firma = f"t={t},v1={pagos._hmac('whsec_prueba', t.encode() + b'.' + cuerpo)}"
+            self.assertEqual(pagos.recibir(self.con, self.cfg, "stripe", cuerpo, {"Stripe-Signature": firma}, {}), (200, "ok"))
+        motor.procesar_pendientes(self.con, self.cfg)
+        self.assertEqual([v["monto_centavos"] for v in self.venta()], [125050])
+
     def test_pago_de_quien_no_es_cliente_queda_en_csv_para_importar(self):
         from rv import pagos
         cuerpo, firma = self.stripe(telefono="+52 55 9999 0000")

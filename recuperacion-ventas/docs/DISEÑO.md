@@ -326,7 +326,8 @@ Verificar firma → encolar en `entrada` → 200; el trabajador procesa como cua
 
 - **Stripe**: `Stripe-Signature: t=…,v1=…`, HMAC-SHA256 de `"<t>." + cuerpo crudo` con el secreto `whsec_…`; acepta
   varias `v1` (rotación del secreto); primero la firma y después la antigüedad (máximo 5 min). Solo
-  `checkout.session.completed` con `payment_status=paid`; monto `amount_total` (centavos), cliente en
+  `checkout.session.completed` y `checkout.session.async_payment_succeeded` (OXXO y transferencias se pagan después)
+  con `payment_status=paid`; monto `amount_total` (centavos), cliente en
   `customer_details.phone/email`. Clave de cola `p:stripe:<evento>`: un reenvío no duplica.
 - **Mercado Pago**: `x-signature: ts=…,v1=…`, HMAC-SHA256 de `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`
   (omitiendo lo que falte; `data.id` en minúsculas). El aviso solo trae el id: el trabajador consulta

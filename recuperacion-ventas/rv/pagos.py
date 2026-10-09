@@ -63,7 +63,8 @@ def recibir(con, cfg, proveedor, cuerpo, cabeceras, query):
             evento = json.loads(cuerpo)
         except ValueError:
             return 400, "JSON inválido"
-        if evento.get("type") != "checkout.session.completed":
+        # OXXO y transferencias llegan en completed sin pagar y se pagan después en async_payment_succeeded
+        if evento.get("type") not in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
             return 200, "evento ignorado"   # 200 para que Stripe no lo reintente
         clave, item = f"p:stripe:{evento['id']}", {"tipo": "pago", "proveedor": "stripe", "objeto": evento["data"]["object"]}
     else:
