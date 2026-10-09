@@ -4,7 +4,7 @@ Sistema de recuperación de ventas.
 
 WhatsApp (y correo) con IA, citas en Google Calendar o Microsoft 365, seguimiento, reactivación, reseñas, ventas
 registradas solas desde Stripe/Mercado Pago y reporte mensual para negocios de servicio.
-Python 3.11+ sin dependencias. Diseño: [docs/DISEÑO.md](docs/DISEÑO.md) · Decisiones: [docs/DECISIONES.md](docs/DECISIONES.md).
+Python 3.11+ sin dependencias. Resumen para retomar el proyecto: [docs/HANDOFF.md](docs/HANDOFF.md) · Diseño: [docs/DISEÑO.md](docs/DISEÑO.md) · Decisiones: [docs/DECISIONES.md](docs/DECISIONES.md).
 
 ## Demo sin cuentas (modo prueba)
 
