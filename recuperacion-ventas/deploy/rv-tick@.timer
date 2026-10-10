@@ -1,0 +1,11 @@
+#   systemctl enable --now rv-tick@dental-garza.timer
+[Unit]
+Description=Recuperación de ventas: tick cada 5 min de %i
+
+[Timer]
+OnCalendar=*:0/5
+AccuracySec=10s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

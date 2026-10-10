@@ -1,0 +1,24 @@
+# Servidor (webhook + bandeja) de un cliente. Instancia = id de la carpeta en /srv/rv/clientes/<id>.
+#   systemctl enable --now rv@dental-garza
+[Unit]
+Description=Recuperación de ventas: servidor de %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rv
+Group=rv
+WorkingDirectory=/srv/rv/app/recuperacion-ventas
+EnvironmentFile=/srv/rv/clientes/%i/secretos.env
+ExecStart=/usr/bin/python3 -m rv --cliente /srv/rv/clientes/%i serve
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/srv/rv/clientes/%i
+
+[Install]
+WantedBy=multi-user.target

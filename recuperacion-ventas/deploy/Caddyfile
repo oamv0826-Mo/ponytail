@@ -1,0 +1,34 @@
+# /etc/caddy/Caddyfile — un dominio, una ruta por cliente. Caddy obtiene y renueva el certificado HTTPS solo.
+# Cada cliente: un puerto distinto en su cliente.json ("puerto") y url_publica = https://rv.tudominio.mx/c/<id>
+rv.tudominio.mx {
+	encode gzip
+	request_body {
+		max_size 2MB
+	}
+
+	# Cliente 1 (también recibe el callback a nivel app de Meta: ver docs/runbook.md)
+	handle_path /c/dental-garza/* {
+		reverse_proxy 127.0.0.1:8081
+	}
+	handle_path /p/dental-garza/* {
+		root * /srv/rv/clientes/dental-garza/pagina
+		file_server
+	}
+
+	# Cliente 2
+	handle_path /c/clinica-estetica-x/* {
+		reverse_proxy 127.0.0.1:8082
+	}
+	handle_path /p/clinica-estetica-x/* {
+		root * /srv/rv/clientes/clinica-estetica-x/pagina
+		file_server
+	}
+
+	handle {
+		respond 404
+	}
+
+	log {
+		output file /var/log/caddy/rv.log
+	}
+}

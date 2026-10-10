@@ -1,0 +1,16 @@
+# Envíos programados de un cliente (lo dispara rv-tick@.timer cada 5 min).
+[Unit]
+Description=Recuperación de ventas: tick de %i
+
+[Service]
+Type=oneshot
+User=rv
+Group=rv
+WorkingDirectory=/srv/rv/app/recuperacion-ventas
+EnvironmentFile=/srv/rv/clientes/%i/secretos.env
+ExecStart=/usr/bin/python3 -m rv --cliente /srv/rv/clientes/%i tick
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/srv/rv/clientes/%i

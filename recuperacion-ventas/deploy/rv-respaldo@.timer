@@ -1,0 +1,11 @@
+#   systemctl enable --now rv-respaldo@dental-garza.timer
+[Unit]
+Description=Recuperación de ventas: respaldo diario de %i
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
