@@ -92,5 +92,5 @@ Se envían dentro de la ventana de 24 h, porque el cliente acaba de escribir. Vi
 
 ### cotizacion (Utilidad)
 ```
-Hola {{1}}, te compartimos la cotización {{3}} de {{2}} por un total de {{4}}, vigente hasta el {{5}}. Responde a este mensaje para recibir el detalle o agendar tu cita.
+Hola {{1}}, te compartimos de {{2}} la cotización {{3}} por un total de {{4}}, vigente hasta el {{5}}. Responde a este mensaje para recibir el detalle o agendar tu cita.
 ```
